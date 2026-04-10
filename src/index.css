@@ -1,0 +1,20 @@
+@import "tailwindcss";
+
+@theme {
+  --color-forest-900: #0a1f12;
+  --color-forest-800: #143224;
+  --color-forest-700: #1e4d3a;
+  --color-sasquach-gold: #c3a343;
+  --color-sasquach-red: #8b0000;
+}
+
+@layer base {
+  body {
+    @apply selection:bg-sasquach-gold/30;
+  }
+}
+
+/* Custom premium forest gradients */
+.bg-forest-gradient {
+  background: radial-gradient(circle at center, var(--color-forest-800) 0%, var(--color-forest-900) 100%);
+}
