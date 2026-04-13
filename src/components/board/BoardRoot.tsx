@@ -1,43 +1,69 @@
 import { useRitual } from '../../context/RitualContext';
+import { BoardView } from './BoardView';
+import { motion } from 'framer-motion';
 
+/**
+ * BoardRoot: The Mirror Narrative Orchestrator
+ * Improved stacking context for visibility.
+ */
 export const BoardRoot = () => {
   const { state } = useRitual();
 
   return (
-    <div className="min-h-screen bg-forest-gradient p-12">
-      <header className="flex justify-between items-center mb-12">
-        <div>
-          <h2 className="text-stone-500 text-sm font-bold tracking-[0.3em] uppercase">The Mirror</h2>
-          <h1 className="text-3xl text-sasquach-gold font-black italic">PHASE: {state.currentPhase}</h1>
-        </div>
-        <div className="text-right">
-          <p className="text-stone-500 text-xs">ROOM ID</p>
-          <p className="font-mono text-sasquach-gold opacity-50">{state.roomId}</p>
-        </div>
-      </header>
+    <div className="min-h-screen bg-stone-950 text-stone-200 overflow-hidden relative font-sans">
+      {/* 1. Deep Background Layer (z-0) */}
+      <div className="absolute inset-0 z-0 pointer-events-none">
+         {/* Subtle texture */}
+         <div className="absolute inset-0 opacity-10 bg-[url('https://www.transparenttextures.com/patterns/dark-leather.png')]" />
+         {/* Emerald Glow */}
+         <div className="absolute inset-0 bg-emerald-950/20" />
+      </div>
 
-      <main className="grid grid-cols-12 gap-8">
-        <section className="col-span-12 lg:col-span-8 aspect-video bg-forest-900/50 rounded-2xl border border-forest-700/30 flex items-center justify-center relative overflow-hidden">
-           {/* Visual Narrative Space */}
-           <div className="absolute inset-0 opacity-10 bg-[url('https://www.transparenttextures.com/patterns/dark-leather.png')]"></div>
-           <div className="text-center z-10">
-              <div className="w-32 h-32 bg-sasquach-gold/10 rounded-full blur-3xl absolute -translate-x-1/2 -translate-y-1/2 top-1/2 left-1/2"></div>
-              <p className="text-stone-600 animate-pulse uppercase tracking-[0.5em]">Waiting for Pilot Sync...</p>
-           </div>
-        </section>
+      {/* 2. Main content Layer (z-10) */}
+      <div className="absolute inset-0 z-10 flex flex-col">
+        <header className="relative z-30 flex justify-between items-start p-12">
+          <div className="space-y-1">
+            <div className="flex items-center gap-3">
+              <div className="w-1.5 h-1.5 rounded-full bg-sasquach-gold shadow-[0_0_10px_#c3a343] animate-pulse" />
+              <h2 className="text-stone-500 text-[10px] font-black tracking-[0.5em] uppercase">The Mirror • Collective Intelligence</h2>
+            </div>
+            <h1 className="text-5xl text-sasquach-gold font-light tracking-tight italic">
+              Phase: <span className="font-bold uppercase tracking-normal not-italic text-stone-100">{state.currentPhase}</span>
+            </h1>
+          </div>
+          <div className="text-right glass-panel p-5 rounded-2xl border border-white/5 bg-white/[0.03] backdrop-blur-md">
+            <p className="text-stone-500 text-[9px] uppercase tracking-[0.4em] mb-2">Ritual Node ID</p>
+            <p className="font-mono text-sasquach-gold/80 text-sm tracking-widest">{state.roomId}</p>
+          </div>
+        </header>
 
-        <section className="col-span-12 lg:col-span-4 space-y-6">
-           <div className="p-6 bg-stone-900/50 rounded-xl border border-stone-800">
-              <h3 className="text-xs font-bold text-stone-500 uppercase tracking-widest mb-4">Intel Colectiva</h3>
-              <div className="space-y-4">
-                 <div className="h-2 w-full bg-stone-800 rounded-full overflow-hidden">
-                    <div className="h-full bg-sasquach-gold w-1/4 transition-all duration-1000"></div>
-                 </div>
-                 <p className="text-stone-400 text-sm italic">"Why summary will appear here..."</p>
-              </div>
-           </div>
-        </section>
-      </main>
+        <main className="flex-1 relative z-10">
+          <BoardView />
+        </main>
+
+        <footer className="p-12 relative z-30 flex justify-between items-end pointer-events-none">
+          <div className="max-w-xs space-y-4 pointer-events-auto">
+            <div className="p-8 glass-panel rounded-[2rem] border border-sasquach-gold/10 bg-stone-900/80 backdrop-blur-2xl shadow-2xl">
+               <div className="flex items-center gap-2 mb-4">
+                  <div className="w-1 h-1 rounded-full bg-sasquach-gold/50" />
+                  <h3 className="text-[10px] font-bold text-stone-500 uppercase tracking-[0.4em]">Ecosistema Externo</h3>
+               </div>
+               <div className="space-y-5">
+                  <div className="h-1 w-full bg-stone-800/40 rounded-full overflow-hidden">
+                     <motion.div 
+                       initial={{ width: 0 }}
+                       animate={{ width: `${Math.min((state.context.whyResponses.length / 5) * 100, 100)}%` }}
+                       className="h-full bg-sasquach-gold shadow-[0_0_15px_rgba(195,163,67,0.4)]" 
+                     />
+                  </div>
+                  <p className="text-stone-400 text-xs italic leading-relaxed opacity-80">
+                    {state.context.whySummary || '"Voces sincronizadas..."'}
+                  </p>
+               </div>
+            </div>
+          </div>
+        </footer>
+      </div>
     </div>
   );
 };

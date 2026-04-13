@@ -18,8 +18,15 @@ export interface FrictionPoint {
   count: number;
 }
 
+export interface WhyEntry {
+  role: ParticipantRole;
+  text: string;
+  timestamp: number;
+}
+
 export interface RoomContext {
   whySummary: string;
+  whyResponses: WhyEntry[];
   areaHeads: AreaHead[];
   rootCauses: RootCause[];
 }
@@ -33,8 +40,11 @@ export interface RoomState {
   frictionMap: FrictionPoint[];
 }
 
+export type ParticipantRole = 'BOARD' | 'DOCTOR' | 'NURSE' | 'KINE' | 'INFECTOLOGIST' | 'ADMIN';
+
 export interface RitualEvent {
-  type: 'PHASE_CHANGE' | 'DATA_UPDATE' | 'FRICTION_TOGGLE';
+  type: 'PHASE_CHANGE' | 'DATA_UPDATE' | 'FRICTION_TOGGLE' | 'SYNC_REQUEST' | 'SYNC_RESPONSE';
   payload: Partial<RoomState>;
-  sender: 'BOARD' | 'PILOT';
+  sender: ParticipantRole;
+  timestamp: number;
 }

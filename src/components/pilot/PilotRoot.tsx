@@ -1,56 +1,70 @@
 import { useRitual } from '../../context/RitualContext';
-import { Send, Target } from 'lucide-react';
+import { Target } from 'lucide-react';
+import { PilotView } from './PilotView';
 
+/**
+ * PilotRoot: Mobile Orchestrator
+ * Extracts role from RitualContext (synced with URL via App.tsx) 
+ * and renders the appropriate view based on the current phase.
+ */
 export const PilotRoot = () => {
-  const { state, updateState, nextPhase } = useRitual();
-
-  const handleWhyUpdate = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    updateState({ context: { ...state.context, whySummary: e.target.value } });
-  };
+  const { state, nextPhase, role } = useRitual();
 
   return (
-    <div className="min-h-screen bg-stone-950 flex flex-col">
-      <header className="p-6 border-b border-stone-800 flex justify-between items-center bg-stone-900/50 backdrop-blur-md sticky top-0 z-10">
-        <div>
-          <h2 className="text-sasquach-gold text-[10px] font-black tracking-widest uppercase">The Pilot</h2>
-          <h1 className="text-xl font-bold">{state.currentPhase}</h1>
+    <div className="min-h-screen bg-stone-950 flex flex-col font-sans selection:bg-sasquach-gold/30 selection:text-stone-950">
+      {/* Visual Header with Ritual Identity */}
+      <header className="p-6 border-b border-stone-900 flex justify-between items-center bg-stone-950/80 backdrop-blur-xl sticky top-0 z-30">
+        <div className="flex flex-col">
+          <div className="flex items-center gap-2 mb-1">
+             <div className="w-1.5 h-1.5 rounded-full bg-sasquach-gold shadow-[0_0_8px_#c3a343]" />
+             <h2 className="text-sasquach-gold/60 text-[9px] font-black tracking-[0.4em] uppercase">Pilot Control • {role}</h2>
+          </div>
+          <h1 className="text-lg font-serif italic text-stone-200">
+            Phase: <span className="font-sans font-bold uppercase tracking-normal not-italic text-stone-100">{state.currentPhase}</span>
+          </h1>
         </div>
+        
+        {/* Next Phase Master Control - Only visible to admin-level or for demo purposes */}
         <button 
           onClick={nextPhase}
-          className="bg-sasquach-gold text-stone-950 px-4 py-2 rounded-full text-xs font-black flex items-center gap-2 active:scale-95 transition-transform"
+          className="bg-sasquach-gold text-stone-950 px-5 py-2.5 rounded-full text-[10px] font-black tracking-widest flex items-center gap-2 shadow-lg shadow-sasquach-gold/10 hover:scale-105 active:scale-95 transition-all"
         >
           SIGUIENTE <Target size={14} />
         </button>
       </header>
 
-      <main className="flex-1 p-6 space-y-8">
-        <section className="space-y-4">
-          <label className="text-xs font-bold text-stone-500 uppercase tracking-widest">Tu Propósito (Why)</label>
-          <textarea 
-            value={state.context.whySummary}
-            onChange={handleWhyUpdate}
-            placeholder="¿Por qué estamos resolviendo esto hoy?"
-            className="w-full bg-stone-900 border border-stone-800 rounded-xl p-4 text-stone-100 placeholder:text-stone-700 focus:outline-none focus:border-sasquach-gold/50 min-h-[150px] transition-colors"
-          />
-          <p className="text-[10px] text-stone-600 italic">"Los datos ingresados aquí se sincronizan de forma anónima con El Espejo."</p>
+      <main className="flex-1 overflow-y-auto">
+        <section className="max-w-md mx-auto py-4">
+           {/* Rendering Phase View: Context is provided via RitualProvider */}
+           {state.currentPhase === 'WHY' ? (
+             <PilotView /> 
+           ) : (
+             <div className="p-12 text-center text-stone-600 italic animate-pulse">
+                Aguardando instrucciones del Ritual...
+             </div>
+           )}
         </section>
 
-        <section className="p-6 bg-forest-900/20 border border-forest-800/50 rounded-2xl flex items-center justify-between">
+        {/* Sync Status - Sticky Bottom */}
+        <section className="p-4 mx-4 mb-4 bg-stone-900/40 border border-stone-800/50 rounded-2xl flex items-center justify-between backdrop-blur-md">
            <div className="flex gap-4 items-center">
-              <div className="w-10 h-10 rounded-full bg-forest-800 flex items-center justify-center">
-                 <Send size={18} className="text-sasquach-gold" />
+              <div className="w-8 h-8 rounded-full bg-emerald-deep/20 flex items-center justify-center border border-emerald-deep/20 text-sasquach-gold">
+                 <Target size={14} />
               </div>
               <div>
-                 <p className="text-xs font-bold uppercase tracking-tighter">Estado de Sincronización</p>
-                 <p className="text-[10px] text-stone-500">Conectado vía BroadcastChannel</p>
+                 <p className="text-[8px] font-black uppercase tracking-widest text-stone-500">Sync Status</p>
+                 <p className="text-[10px] text-stone-400 font-medium tracking-tight">Authenticated as {role}</p>
               </div>
            </div>
-           <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></div>
+           <div className="flex gap-1 pr-2">
+              <span className="w-1 h-1 rounded-full bg-sasquach-gold animate-pulse"></span>
+              <span className="w-1 h-1 rounded-full bg-sasquach-gold opacity-50"></span>
+           </div>
         </section>
       </main>
 
-      <footer className="p-6 border-t border-stone-800 bg-stone-900/30 text-[10px] text-stone-600 text-center uppercase tracking-widest">
-        Sasquach Clinical Engine V1.0
+      <footer className="p-6 border-t border-stone-900 bg-black/40 text-[9px] text-stone-700 text-center uppercase tracking-[0.5em] font-medium">
+        Sasquach Ritual Engine • Node {state.roomId}
       </footer>
     </div>
   );
