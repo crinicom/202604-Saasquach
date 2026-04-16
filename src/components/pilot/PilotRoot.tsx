@@ -1,4 +1,4 @@
-import { useRitual } from '../../context/RitualContext';
+import { useRitual } from '../../hooks/useRitual';
 import { Target } from 'lucide-react';
 import { PilotView } from './PilotView';
 
@@ -36,13 +36,7 @@ export const PilotRoot = () => {
       <main className="flex-1 overflow-y-auto">
         <section className="max-w-md mx-auto py-4">
            {/* Rendering Phase View: Context is provided via RitualProvider */}
-           {state.currentPhase === 'WHY' ? (
-             <PilotView /> 
-           ) : (
-             <div className="p-12 text-center text-stone-600 italic animate-pulse">
-                Aguardando instrucciones del Ritual...
-             </div>
-           )}
+           <PilotView />
         </section>
 
         {/* Sync Status - Sticky Bottom */}

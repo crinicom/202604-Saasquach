@@ -1,4 +1,4 @@
-import { useRitual } from '../../context/RitualContext';
+import { useRitual } from '../../hooks/useRitual';
 import { BoardView } from './BoardView';
 import { motion } from 'framer-motion';
 

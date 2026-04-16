@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { RitualProvider } from './context/RitualContext';
 import { BoardRoot } from './components/board/BoardRoot';
 import { PilotRoot } from './components/pilot/PilotRoot';
+import { DevControlPanel } from './components/debug/DevControlPanel';
 
 import { ParticipantRole } from './types';
 
@@ -51,6 +52,7 @@ function App() {
 
   return (
     <RitualProvider role={role}>
+      <DevControlPanel />
       {role === 'BOARD' ? <BoardRoot /> : <PilotRoot />}
     </RitualProvider>
   );
