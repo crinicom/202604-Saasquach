@@ -227,9 +227,14 @@ export const useSasquachSync = (role: ParticipantRole) => {
           transportRef.current = null;
         }
         
-        const newChannelName = getChannelName(newRitualId);
-        transportRef.current = new BroadcastTransport(newChannelName);
-        console.log(`[URL_SYNC] Created new transport with channel: "${newChannelName}"`);
+        if (USE_SUPABASE) {
+          transportRef.current = createSupabaseTransport(SUPABASE_URL, SUPABASE_KEY, newRitualId);
+          console.log(`[URL_SYNC] Created new Supabase transport for: "${newRitualId}"`);
+        } else {
+          const newChannelName = getChannelName(newRitualId);
+          transportRef.current = new BroadcastTransport(newChannelName);
+          console.log(`[URL_SYNC] Created new BroadcastChannel: "${newChannelName}"`);
+        }
         
         setCurrentRitualId(newRitualId);
         currentRitualIdRef.current = newRitualId;
