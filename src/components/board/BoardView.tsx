@@ -357,23 +357,23 @@ const RuptureCommitmentSlot: React.FC<RuptureCommitmentSlotProps> = ({ commitmen
         >
           <div className="relative rounded-xl overflow-hidden"
             style={{
-              background: 'rgba(28, 28, 28, 0.8)',
+              background: 'rgba(28, 28, 28, 0.9)',
               backdropFilter: 'blur(20px)',
-              border: '2px solid rgba(251, 191, 36, 0.5)',
-              boxShadow: '0 0 20px rgba(251, 191, 36, 0.2)',
+              border: '2px solid rgba(251, 191, 36, 0.6)',
+              boxShadow: '0 0 30px rgba(251, 191, 36, 0.3), inset 0 0 20px rgba(251, 191, 36, 0.05)',
             }}
           >
-            <div className="absolute inset-0 bg-gradient-to-b from-sasquach-gold/10 to-transparent" />
+            <div className="absolute inset-0 bg-gradient-to-b from-sasquach-gold/15 to-transparent" />
             
             <div className="relative p-4">
               <div className="flex items-center gap-2 mb-3">
-                <div className="w-2 h-2 rounded-full bg-sasquach-gold animate-pulse" />
-                <span className="text-[8px] uppercase tracking-[0.3em] text-sasquach-gold font-bold">
-                  COMPROMISO DE RUPTURA
+                <div className="w-2.5 h-2.5 rounded-full bg-sasquach-gold animate-pulse" />
+                <span className="text-[8px] uppercase tracking-[0.35em] text-sasquach-gold font-bold">
+                  III. ACCIÓN DE RUPTURA
                 </span>
               </div>
               
-              <p className="text-stone-100 text-[11px] font-serif italic leading-relaxed">
+              <p className="text-stone-100 text-[12px] font-serif italic leading-relaxed">
                 "{commitment}"
               </p>
             </div>
@@ -382,12 +382,111 @@ const RuptureCommitmentSlot: React.FC<RuptureCommitmentSlotProps> = ({ commitmen
           <div 
             className="absolute -right-px top-1/4 w-px h-1/2"
             style={{
-              background: 'linear-gradient(180deg, rgba(195, 163, 67, 0.6) 0%, rgba(195, 163, 67, 0) 100%)',
+              background: 'linear-gradient(180deg, rgba(195, 163, 67, 0.7) 0%, rgba(195, 163, 67, 0) 100%)',
             }}
           />
         </motion.div>
       )}
     </AnimatePresence>
+  );
+};
+
+interface CommitmentRevelationProps {
+  text: string;
+  siloCenter: { x: number; y: number };
+  isActive: boolean;
+  vmin: number;
+}
+
+const CommitmentRevelation: React.FC<CommitmentRevelationProps> = ({ text, siloCenter, isActive, vmin }) => {
+  if (!isActive) return null;
+  
+  const titleSize = Math.max(14, Math.min(20, vmin * 0.025));
+  const textSize = Math.max(16, Math.min(28, vmin * 0.04));
+  
+  return (
+    <motion.div
+      initial={{ 
+        scale: 0, 
+        opacity: 0,
+        filter: 'brightness(3)',
+      }}
+      animate={{ 
+        scale: 1, 
+        opacity: 1,
+        filter: 'brightness(1)',
+      }}
+      exit={{ 
+        scale: 0.8, 
+        opacity: 0,
+        filter: 'brightness(2)',
+      }}
+      transition={{
+        type: 'spring',
+        stiffness: 80,
+        damping: 12,
+        duration: 1.5,
+      }}
+      className="absolute pointer-events-none"
+      style={{
+        left: siloCenter.x,
+        top: siloCenter.y,
+        transform: 'translate(-50%, -50%)',
+        zIndex: 100,
+      }}
+    >
+      <div 
+        className="relative rounded-3xl overflow-hidden"
+        style={{
+          minWidth: `${vmin * 0.4}px`,
+          maxWidth: `${vmin * 0.7}px`,
+          background: 'radial-gradient(ellipse at center, rgba(251, 191, 36, 0.15) 0%, rgba(28, 28, 28, 0.95) 70%)',
+          border: '3px solid rgba(251, 191, 36, 0.8)',
+          boxShadow: '0 0 80px rgba(251, 191, 36, 0.5), 0 0 160px rgba(251, 191, 36, 0.3), inset 0 0 60px rgba(251, 191, 36, 0.1)',
+          backdropFilter: 'blur(20px)',
+        }}
+      >
+        <div className="absolute inset-0 bg-gradient-to-b from-sasquach-gold/20 via-transparent to-transparent" />
+        
+        <div className="relative p-8 text-center">
+          <motion.div
+            initial={{ opacity: 0, y: -20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.3, duration: 0.8 }}
+            className="mb-4"
+          >
+            <div className="flex items-center justify-center gap-3 mb-3">
+              <div className="w-3 h-3 rounded-full bg-sasquach-gold animate-pulse" />
+              <span 
+                className="uppercase tracking-[0.4em] text-sasquach-gold font-black"
+                style={{ fontSize: `${titleSize}px` }}
+              >
+                NUESTRO COMPROMISO
+              </span>
+              <div className="w-3 h-3 rounded-full bg-sasquach-gold animate-pulse" />
+            </div>
+            <div className="w-full h-px bg-gradient-to-r from-transparent via-sasquach-gold/50 to-transparent" />
+          </motion.div>
+          
+          <motion.p
+            initial={{ opacity: 0, scale: 0.9 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ delay: 0.5, duration: 1 }}
+            className="text-stone-100 font-serif italic leading-relaxed"
+            style={{ fontSize: `${textSize}px` }}
+          >
+            "{text}"
+          </motion.p>
+          
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: [0, 0.6, 0] }}
+            transition={{ delay: 1, duration: 2, repeat: Infinity }}
+            className="mt-6 w-full h-px bg-gradient-to-r from-transparent via-amber-400/40 to-transparent"
+          />
+        </div>
+      </div>
+    </motion.div>
   );
 };
 
@@ -502,11 +601,12 @@ interface WeightedSiloNodeProps {
   isSelectable?: boolean;
   isFaded?: boolean;
   isFocused?: boolean;
+  isDisintegrating?: boolean;
   onContextMenu: (e: React.MouseEvent, node: AreaHead) => void;
   onSelect: (silo: AreaHead) => void;
 }
 
-const WeightedSiloNode: React.FC<WeightedSiloNodeProps> = ({ areaHead, index, isNew, isMerged, isSelected, isSelectable, isFaded, isFocused, onContextMenu, onSelect }) => {
+const WeightedSiloNode: React.FC<WeightedSiloNodeProps> = ({ areaHead, index, isNew, isMerged, isSelected, isSelectable, isFaded, isFocused, isDisintegrating, onContextMenu, onSelect }) => {
   const [isHovered, setIsHovered] = useState(false);
   const { weight } = areaHead;
   const isDiscarded = areaHead.status === 'discarded';
@@ -514,22 +614,24 @@ const WeightedSiloNode: React.FC<WeightedSiloNodeProps> = ({ areaHead, index, is
   const isHeavyWeight = weight > 1.5;
   const isSingleVoteNoise = areaHead.votedBy.length === 1 && weight <= 1.15;
   
-  const baseOpacity = isDiscarded 
-    ? 0.2 
-    : isFaded 
-      ? (isFocused ? 0.1 : 0.1) 
-      : isSingleVoteNoise 
-        ? 0.4 
-        : isSelected 
-          ? 0.95 
-          : (0.3 + weight * 0.35);
+  const baseOpacity = isDisintegrating 
+    ? 0 
+    : isDiscarded 
+      ? 0.2 
+      : isFaded 
+        ? (isFocused ? 0.1 : 0.1) 
+        : isSingleVoteNoise 
+          ? 0.4 
+          : isSelected 
+            ? 0.95 
+            : (0.3 + weight * 0.35);
 
   const baseSize = 110;
-  const dramaticScale = 0.6 + (weight * 0.5);
-  const size = baseSize * dramaticScale;
+  const regularScale = 0.6 + (weight * 0.5);
+  const size = baseSize * (isDisintegrating ? 2.5 : regularScale);
 
   const handleClick = (e: React.MouseEvent) => {
-    if (isSelectable && !isDiscarded) {
+    if (isSelectable && !isDiscarded && !isDisintegrating) {
       e.stopPropagation();
       onSelect(areaHead);
     }
@@ -537,8 +639,8 @@ const WeightedSiloNode: React.FC<WeightedSiloNodeProps> = ({ areaHead, index, is
 
   const springTransition = {
     type: "spring" as const,
-    stiffness: 180,
-    damping: 20,
+    stiffness: isDisintegrating ? 50 : 180,
+    damping: isDisintegrating ? 8 : 20,
   };
 
   return (
@@ -548,41 +650,59 @@ const WeightedSiloNode: React.FC<WeightedSiloNodeProps> = ({ areaHead, index, is
         opacity: 0, 
       }}
       animate={{
-        scale: isSelected ? dramaticScale * 1.15 : dramaticScale,
-        opacity: baseOpacity,
+        scale: isDisintegrating ? [2.5, 3, 0] : (isSelected ? regularScale * 1.15 : regularScale),
+        opacity: isDisintegrating ? [0.95, 0.5, 0] : baseOpacity,
+        filter: isDisintegrating ? ['brightness(1)', 'brightness(2)', 'brightness(3)'] : 'brightness(1)',
       }}
-      whileHover={isSelectable && !isDiscarded ? { scale: dramaticScale * 1.2 } : {}}
+      whileHover={isSelectable && !isDiscarded && !isDisintegrating ? { scale: regularScale * 1.2 } : {}}
       transition={{
         ...springTransition,
         delay: isNew ? 0 : index * 0.08,
+        duration: isDisintegrating ? 1.2 : undefined,
       }}
       onClick={handleClick}
       onHoverStart={() => setIsHovered(true)}
       onHoverEnd={() => setIsHovered(false)}
       onContextMenu={(e) => onContextMenu(e, areaHead)}
-      className={`relative rounded-full flex flex-col items-center justify-center backdrop-blur-md shadow-xl overflow-visible ${isSelectable && !isDiscarded ? 'cursor-pointer' : ''}`}
+      className={`relative rounded-full flex flex-col items-center justify-center backdrop-blur-md shadow-xl overflow-visible ${isSelectable && !isDiscarded && !isDisintegrating ? 'cursor-pointer' : ''}`}
       style={{
         width: `${size}px`,
         height: `${size}px`,
-        background: isDiscarded
-          ? 'radial-gradient(circle, rgba(30, 30, 30, 0.5) 0%, rgba(15, 15, 15, 0.6) 100%)'
-          : isSingleVoteNoise
-          ? 'radial-gradient(circle, rgba(50, 50, 50, 0.3) 0%, rgba(20, 20, 20, 0.4) 100%)'
-          : isSelected
-          ? `radial-gradient(circle, rgba(40, 80, 50, 0.9) 0%, rgba(20, 50, 30, 0.95) 100%)`
-          : `radial-gradient(circle, rgba(20, ${46 + weight * 20}, ${32 + weight * 15}, ${0.7 + weight * 0.3}) 0%, rgba(10, 31, 18, ${0.85 + weight * 0.15}) 100%)`,
-        borderWidth: isSelected ? '3px' : isMerged ? '2px' : '1px',
+        background: isDisintegrating
+          ? 'radial-gradient(circle, rgba(251, 191, 36, 0.9) 0%, rgba(195, 163, 67, 0.7) 50%, rgba(255, 255, 255, 0.3) 100%)'
+          : isDiscarded
+            ? 'radial-gradient(circle, rgba(30, 30, 30, 0.5) 0%, rgba(15, 15, 15, 0.6) 100%)'
+            : isSingleVoteNoise
+              ? 'radial-gradient(circle, rgba(50, 50, 50, 0.3) 0%, rgba(20, 20, 20, 0.4) 100%)'
+              : isSelected
+                ? `radial-gradient(circle, rgba(40, 80, 50, 0.9) 0%, rgba(20, 50, 30, 0.95) 100%)`
+                : `radial-gradient(circle, rgba(20, ${46 + weight * 20}, ${32 + weight * 15}, ${0.7 + weight * 0.3}) 0%, rgba(10, 31, 18, ${0.85 + weight * 0.15}) 100%)`,
+        borderWidth: isDisintegrating ? '3px' : isSelected ? '3px' : isMerged ? '2px' : '1px',
         borderStyle: 'solid',
-        borderColor: isDiscarded ? 'rgba(100, 100, 100, 0.2)' : isSelected ? 'rgba(251, 191, 36, 1)' : isMerged ? 'rgba(251, 191, 36, 0.8)' : isSingleVoteNoise ? 'rgba(100, 100, 100, 0.3)' : `rgba(195, 163, 67, ${0.2 + weight * 0.3})`,
-        boxShadow: isDiscarded ? 'none' : isSelected
-          ? `0 0 30px rgba(251, 191, 36, 0.6), 0 0 60px rgba(251, 191, 36, 0.3), inset 0 0 20px rgba(251, 191, 36, 0.1)`
-          : isMerged 
-          ? `0 0 ${15 + weight * 25}px rgba(251, 191, 36, 0.4), inset 0 0 15px rgba(251, 191, 36, 0.1)`
-          : isHeavyWeight
-          ? `0 0 ${15 + weight * 20}px rgba(195, 163, 67, ${0.15 + weight * 0.15}), inset 0 0 10px rgba(195, 163, 67, 0.05)`
-          : `0 0 ${8 + weight * 12}px rgba(195, 163, 67, ${0.05 + weight * 0.1})`,
-        filter: isDiscarded ? 'grayscale(0.8)' : isSingleVoteNoise ? 'grayscale(0.3)' : isSelected ? 'brightness(1.1)' : 'none',
-        zIndex: isSelected ? 30 : 20,
+        borderColor: isDisintegrating 
+          ? 'rgba(255, 255, 255, 0.9)' 
+          : isDiscarded 
+            ? 'rgba(100, 100, 100, 0.2)' 
+            : isSelected 
+              ? 'rgba(251, 191, 36, 1)' 
+              : isMerged 
+                ? 'rgba(251, 191, 36, 0.8)' 
+                : isSingleVoteNoise 
+                  ? 'rgba(100, 100, 100, 0.3)' 
+                  : `rgba(195, 163, 67, ${0.2 + weight * 0.3})`,
+        boxShadow: isDisintegrating
+          ? '0 0 60px rgba(251, 191, 36, 0.9), 0 0 120px rgba(251, 191, 36, 0.6)'
+          : isDiscarded 
+            ? 'none' 
+            : isSelected
+              ? `0 0 30px rgba(251, 191, 36, 0.6), 0 0 60px rgba(251, 191, 36, 0.3), inset 0 0 20px rgba(251, 191, 36, 0.1)`
+              : isMerged 
+                ? `0 0 ${15 + weight * 25}px rgba(251, 191, 36, 0.4), inset 0 0 15px rgba(251, 191, 36, 0.1)`
+                : isHeavyWeight
+                  ? `0 0 ${15 + weight * 20}px rgba(195, 163, 67, ${0.15 + weight * 0.15}), inset 0 0 10px rgba(195, 163, 67, 0.05)`
+                  : `0 0 ${8 + weight * 12}px rgba(195, 163, 67, ${0.05 + weight * 0.1})`,
+        filter: isDisintegrating ? 'brightness(2)' : isDiscarded ? 'grayscale(0.8)' : isSingleVoteNoise ? 'grayscale(0.3)' : isSelected ? 'brightness(1.1)' : 'none',
+        zIndex: isSelected || isDisintegrating ? 35 : 20,
       }}
     >
       <div className="text-center px-2">
@@ -820,61 +940,6 @@ const seededRandom = (seed: number) => {
   return x - Math.floor(x);
 };
 
-interface OrbitDimensions {
-  width: number;
-  height: number;
-  vmin: number;
-}
-
-const getSharedOrbitPosition = (
-  selectedSiloRole: string | null,
-  areaHeads: AreaHead[],
-  dimensions: OrbitDimensions,
-  isFocused: boolean
-): { x: number; y: number } | null => {
-  if (!selectedSiloRole) return null;
-  
-  const activeAreas = areaHeads.filter(a => a.status !== 'discarded');
-  const sortedAreas = [...activeAreas].sort((a, b) => b.weight - a.weight);
-  
-  const idx = sortedAreas.findIndex(a => a.role === selectedSiloRole);
-  if (idx < 0) return null;
-  
-  const total = sortedAreas.length;
-  const isSelected = true;
-  
-  if (isFocused && isSelected) {
-    return {
-      x: dimensions.width / 2,
-      y: dimensions.height / 2 + dimensions.vmin * 0.08,
-    };
-  }
-  
-  const baseRadiusVmin = isFocused ? dimensions.vmin * 0.42 : dimensions.vmin * 0.30;
-  const angle = (idx / Math.max(1, total)) * Math.PI * 2 - Math.PI / 2;
-  
-  const organicOffsetX = (seededRandom(idx + selectedSiloRole.length) - 0.5) * dimensions.vmin * 0.08;
-  const organicOffsetY = (seededRandom(idx * 2 + selectedSiloRole.length) - 0.5) * dimensions.vmin * 0.08;
-  
-  let x = dimensions.width / 2 + Math.cos(angle) * baseRadiusVmin + organicOffsetX;
-  let y = dimensions.height / 2 + Math.sin(angle) * baseRadiusVmin + organicOffsetY;
-  
-  if (isFocused) {
-    const centerX = dimensions.width / 2;
-    const centerY = dimensions.height / 2;
-    const dx = x - centerX;
-    const dy = y - centerY;
-    const dist = Math.sqrt(dx * dx + dy * dy);
-    if (dist > 0) {
-      const edgeDist = dist * 1.4;
-      x = centerX + (dx / dist) * edgeDist;
-      y = centerY + (dy / dist) * edgeDist;
-    }
-  }
-  
-  return { x, y };
-};
-
 interface SiloOrbitRingProps {
   areaHeads: AreaHead[];
   previousAreaHeads: AreaHead[];
@@ -885,9 +950,10 @@ interface SiloOrbitRingProps {
   similarPairs?: SimilarNodes[];
   fusionProposal?: SimilarNodes | null;
   isFocused?: boolean;
+  isDisintegrating?: boolean;
 }
 
-const SiloOrbitRing: React.FC<SiloOrbitRingProps> = ({ areaHeads, previousAreaHeads, selectedSilo, onContextMenu, onSelectSilo, isSelectable, similarPairs = [], fusionProposal, isFocused = false }) => {
+const SiloOrbitRing: React.FC<SiloOrbitRingProps> = ({ areaHeads, previousAreaHeads, selectedSilo, onContextMenu, onSelectSilo, isSelectable, similarPairs = [], fusionProposal, isFocused = false, isDisintegrating = false }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const [dimensions, setDimensions] = useState({ width: 0, height: 0, vmin: 0 });
   
@@ -1012,6 +1078,7 @@ const SiloOrbitRing: React.FC<SiloOrbitRingProps> = ({ areaHeads, previousAreaHe
                     isSelectable={isSelectable}
                     isFaded={isFaded}
                     isFocused={isFocused}
+                    isDisintegrating={isDisintegrating && isSelected}
                     onContextMenu={onContextMenu}
                     onSelect={onSelectSilo}
                   />
@@ -1176,10 +1243,20 @@ export const BoardView: React.FC = () => {
     setRuptureCommitment(actionText);
     setSasquachSuccess(true);
     
+    if (isBoard) {
+      updateState({
+        context: {
+          ...state.context,
+          ruptureCommitment: actionText,
+          selectedSilo: null,
+        },
+      });
+    }
+    
     setTimeout(() => {
       setSelectedSilo(null);
       setSiloDisintegrating(false);
-    }, 800);
+    }, 1200);
   };
 
   return (
@@ -1324,6 +1401,7 @@ export const BoardView: React.FC = () => {
               similarPairs={isConvergencePhase ? similarPairs : []}
               fusionProposal={isConvergencePhase ? fusionProposal : null}
               isFocused={currentPhase === 'ACTION' && selectedSilo !== null}
+              isDisintegrating={siloDisintegrating}
             />
           )}
         </AnimatePresence>
@@ -1435,6 +1513,18 @@ export const BoardView: React.FC = () => {
           onSelectAction={handleSelectAction}
         />
 
+        {siloDisintegrating && selectedSilo && (
+          <CommitmentRevelation
+            text={ruptureCommitment || ''}
+            siloCenter={{
+              x: window.innerWidth / 2,
+              y: window.innerHeight / 2 + Math.min(window.innerWidth, window.innerHeight) * SILO_CENTER_OFFSET,
+            }}
+            isActive={siloDisintegrating}
+            vmin={Math.min(window.innerWidth, window.innerHeight)}
+          />
+        )}
+
         <div className={`absolute z-50 ${currentPhase === 'ACTION' && selectedSilo ? 'bottom-12 left-1/2 -translate-x-1/2 pl-64' : 'bottom-12 right-12'}`}>
           <SasquachAvatar
             phase={currentPhase}
@@ -1448,7 +1538,28 @@ export const BoardView: React.FC = () => {
   );
 };
 
-const ORBIT_RADIUS = 125;
+const SILO_CENTER_OFFSET = 0.08;
+
+const getSiloCenterPosition = (
+  selectedSiloRole: string | null,
+  areaHeads: AreaHead[],
+  dimensions: { width: number; height: number; vmin: number }
+): { x: number; y: number } | null => {
+  if (!selectedSiloRole) return null;
+  
+  const activeAreas = areaHeads.filter(a => a.status !== 'discarded');
+  const sortedAreas = [...activeAreas].sort((a, b) => b.weight - a.weight);
+  
+  const idx = sortedAreas.findIndex(a => a.role === selectedSiloRole);
+  if (idx < 0) return null;
+  
+  return {
+    x: dimensions.width / 2,
+    y: dimensions.height / 2 + dimensions.vmin * SILO_CENTER_OFFSET,
+  };
+};
+
+const ORBIT_RADIUS_VMIN = 0.18;
 
 interface ActionNodeProps {
   action: ActionProposal;
@@ -1459,6 +1570,7 @@ interface ActionNodeProps {
   isFading: boolean;
   siloPosition: { x: number; y: number };
   siloDisintegrating: boolean;
+  vmin: number;
   onClick: () => void;
 }
 
@@ -1471,14 +1583,16 @@ const ActionNode: React.FC<ActionNodeProps> = ({
   isFading,
   siloPosition,
   siloDisintegrating,
+  vmin,
   onClick 
 }) => {
-  const orbitalX = siloPosition.x + Math.cos(angle) * ORBIT_RADIUS;
-  const orbitalY = siloPosition.y + Math.sin(angle) * ORBIT_RADIUS;
+  const orbitRadius = vmin * ORBIT_RADIUS_VMIN;
+  const orbitalX = siloPosition.x + Math.cos(angle) * orbitRadius;
+  const orbitalY = siloPosition.y + Math.sin(angle) * orbitRadius;
   
-  const size = 50 + scale * 30;
-  const textLength = action.text.length;
-  const fontSize = textLength > 30 ? 7 : textLength > 20 ? 8 : 9;
+  const baseOrbSize = Math.max(100, vmin * 0.12);
+  const size = baseOrbSize + scale * 15;
+  const clampedFontSize = `clamp(${Math.max(10, vmin * 0.015)}px, ${Math.max(11, vmin * 0.022)}px, ${Math.min(16, vmin * 0.03)}px)`;
   
   const targetX = isSelected && siloDisintegrating ? siloPosition.x : orbitalX;
   const targetY = isSelected && siloDisintegrating ? siloPosition.y : orbitalY;
@@ -1528,10 +1642,11 @@ const ActionNode: React.FC<ActionNodeProps> = ({
           ],
         }}
         transition={{ duration: isSelected ? 1 : 2.5, repeat: Infinity, ease: 'easeInOut' }}
-        className="rounded-full flex items-center justify-center backdrop-blur-md"
+        className="rounded-2xl flex items-center justify-center backdrop-blur-md"
         style={{
           width: `${size}px`,
-          height: `${size}px`,
+          minHeight: `${size * 0.7}px`,
+          maxHeight: `${size * 1.4}px`,
           background: isSelected 
             ? `radial-gradient(circle, rgba(255, 255, 255, 1) 0%, rgba(251, 240, 220, 0.9) 40%, rgba(195, 163, 67, 0.7) 100%)`
             : `radial-gradient(circle, rgba(255, 255, 255, 0.95) 0%, rgba(251, 240, 220, 0.8) 40%, rgba(195, 163, 67, 0.5) 100%)`,
@@ -1539,12 +1654,11 @@ const ActionNode: React.FC<ActionNodeProps> = ({
         }}
       >
         <div 
-          className="w-full h-full flex items-center justify-center px-2 py-1"
-          style={{ overflow: 'hidden' }}
+          className="w-full h-full flex items-center justify-center p-3"
         >
           <p 
-            className="text-center text-stone-800 font-serif italic leading-tight whitespace-normal"
-            style={{ fontSize: `${fontSize}px` }}
+            className="text-center text-stone-800 font-serif italic leading-relaxed break-words hyphens-auto"
+            style={{ fontSize: clampedFontSize }}
           >
             {action.text}
           </p>
@@ -1589,7 +1703,7 @@ const ActionSwarm: React.FC<ActionSwarmProps> = ({
   
   const selectedSiloPosition = useMemo(() => {
     if (!selectedSilo) return null;
-    return getSharedOrbitPosition(selectedSilo.role, areaHeads, dimensions, true);
+    return getSiloCenterPosition(selectedSilo.role, areaHeads, dimensions);
   }, [selectedSilo, areaHeads, dimensions]);
   
   const filteredActions = useMemo(() => {
@@ -1599,6 +1713,8 @@ const ActionSwarm: React.FC<ActionSwarmProps> = ({
     return unique;
   }, [actionProposals, selectedSilo]);
   
+  const orbitRadius = dimensions.vmin * ORBIT_RADIUS_VMIN;
+  
   const actionPositions = useMemo(() => {
     if (!selectedSiloPosition || filteredActions.length === 0) return [];
     
@@ -1607,17 +1723,17 @@ const ActionSwarm: React.FC<ActionSwarmProps> = ({
       const baseAngle = (idx / totalAngles) * Math.PI * 2 - Math.PI / 2;
       
       const jitter = (action.timestamp % 100) / 100;
-      const microOffsetX = (Math.sin(jitter * Math.PI * 2) * 0.5) * 25;
-      const microOffsetY = (Math.cos(jitter * Math.PI * 2) * 0.5) * 25;
+      const microOffsetX = (Math.sin(jitter * Math.PI * 2) * 0.5) * (dimensions.vmin * 0.02);
+      const microOffsetY = (Math.cos(jitter * Math.PI * 2) * 0.5) * (dimensions.vmin * 0.02);
       
       return {
-        x: selectedSiloPosition.x + Math.cos(baseAngle) * ORBIT_RADIUS + microOffsetX,
-        y: selectedSiloPosition.y + Math.sin(baseAngle) * ORBIT_RADIUS + microOffsetY,
+        x: selectedSiloPosition.x + Math.cos(baseAngle) * orbitRadius + microOffsetX,
+        y: selectedSiloPosition.y + Math.sin(baseAngle) * orbitRadius + microOffsetY,
         angle: baseAngle,
       };
     });
     return positions;
-  }, [filteredActions, selectedSiloPosition]);
+  }, [filteredActions, selectedSiloPosition, orbitRadius, dimensions.vmin]);
   
   if (!isVisible || !selectedSiloPosition || filteredActions.length === 0) return null;
   
@@ -1646,23 +1762,24 @@ const ActionSwarm: React.FC<ActionSwarmProps> = ({
                 x2={pos.x}
                 y2={pos.y}
                 stroke="url(#swarmFeedGradient)"
-                strokeWidth={isSelected ? 2 : 1}
+                strokeWidth={isSelected ? 2.5 : 1.5}
+                strokeDasharray={isSelected ? "none" : "4 4"}
                 initial={{ pathLength: 0, opacity: 0 }}
                 animate={{ 
                   pathLength: 1, 
-                  opacity: isFading ? 0 : (isSelected ? 0.8 : 0.25) 
+                  opacity: isFading ? 0 : (isSelected ? 0.7 : 0.35) 
                 }}
                 transition={{ delay: idx * 0.1 + 0.2, duration: 0.5 }}
               />
               <motion.circle
                 cx={pos.x}
                 cy={pos.y}
-                r={3}
+                r={isSelected ? 5 : 3}
                 fill="#fbbf24"
-                opacity={isFading ? 0 : 0.4}
+                opacity={isFading ? 0 : (isSelected ? 0.9 : 0.5)}
                 initial={{ scale: 0 }}
-                animate={{ scale: isSelected ? 1.5 : 1 }}
-                transition={{ delay: idx * 0.1 + 0.3 }}
+                animate={{ scale: isSelected ? [1, 1.3, 1] : 1 }}
+                transition={{ delay: idx * 0.1 + 0.3, duration: isSelected ? 0.8 : 0.3 }}
               />
             </g>
           );
@@ -1685,6 +1802,7 @@ const ActionSwarm: React.FC<ActionSwarmProps> = ({
             isFading={isFading}
             siloPosition={selectedSiloPosition}
             siloDisintegrating={siloDisintegrating}
+            vmin={dimensions.vmin}
             onClick={() => onSelectAction(action.id, action.text)}
           />
         );

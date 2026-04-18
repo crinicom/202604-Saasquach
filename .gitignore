@@ -1,0 +1,24 @@
+# local env files
+.env.local
+.env.*.local
+
+# log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+*.suo
+*.ntvs*.njsproj.user
+*.userprefs
+
+# Build output
+dist/
+
+# Test files
+test-sync.mjs
+*.ts.timestamp-*

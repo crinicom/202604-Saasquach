@@ -6,7 +6,7 @@ import { useConvergence } from '../../hooks/useConvergence';
 import { AreaHead, WhyEntry } from '../../types';
 
 export const PilotView: React.FC = () => {
-  const { state, updateState, role, sessionId, refortifySilo } = useRitual();
+  const { state, updateState, role, sessionId, refortifySilo, tenantConfig } = useRitual();
   const { whyResponses, reinforceWhyEntry } = useConvergence();
   
   const [text, setText] = useState('');
@@ -643,7 +643,7 @@ export const PilotView: React.FC = () => {
 
       <footer className="text-center mt-4">
         <p className="text-[9px] text-stone-600 uppercase tracking-[0.4em] opacity-50">
-          Digital Witness • {role}
+          {tenantConfig.institutionName} • {role}
         </p>
       </footer>
     </div>

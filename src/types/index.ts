@@ -43,12 +43,14 @@ export interface WhyEntry extends WeightedEntry {
 }
 
 export interface RoomContext {
+  ritualId: string;
   whySummary: string;
   whyResponses: WhyEntry[];
   areaHeads: AreaHead[];
   rootCauses: RootCause[];
   actionProposals: ActionProposal[];
   selectedSilo: string | null;
+  ruptureCommitment: string | null;
 }
 
 export interface ActionProposal {
@@ -106,3 +108,18 @@ export interface SimilarNodes {
   similarity: number;
   merged?: boolean;
 }
+
+export interface TenantConfig {
+  primaryColor: string;
+  secondaryColor: string;
+  institutionName: string;
+  logoUrl?: string;
+  ritualTagline: string;
+}
+
+export const DEFAULT_TENANT_CONFIG: TenantConfig = {
+  primaryColor: '#059669',
+  secondaryColor: '#c3a343',
+  institutionName: 'Sasquach Original',
+  ritualTagline: 'Motor de Ejecución Clínica',
+};

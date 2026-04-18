@@ -1,5 +1,5 @@
-import React, { createContext } from 'react';
-import { RoomState, RitualPhase, ParticipantRole, RefortifySiloPayload } from '../types';
+import React, { createContext, useMemo } from 'react';
+import { RoomState, RitualPhase, ParticipantRole, RefortifySiloPayload, TenantConfig, DEFAULT_TENANT_CONFIG } from '../types';
 import { useSasquachSync } from '../hooks/useSasquachSync';
 
 interface RitualContextType {
@@ -11,13 +11,54 @@ interface RitualContextType {
   findMatchingSilo: (name: string) => { silo: any; similarity: number };
   role: ParticipantRole;
   sessionId: string;
+  ritualId: string;
   isBoard: boolean;
+  tenantConfig: TenantConfig;
 }
 
 export const RitualContext = createContext<RitualContextType | undefined>(undefined);
 
+const getTenantConfigFromRitualId = (ritualId: string): TenantConfig => {
+  const tenants: Record<string, TenantConfig> = {
+    'LOBBY': {
+      primaryColor: '#059669',
+      secondaryColor: '#c3a343',
+      institutionName: 'Sasquach Original',
+      ritualTagline: 'Motor de Ejecución Clínica',
+    },
+    'URGENCIAS': {
+      primaryColor: '#dc2626',
+      secondaryColor: '#f59e0b',
+      institutionName: 'Sala de Urgencias',
+      ritualTagline: 'Decisiones que Salvan Vidas',
+    },
+    'LAB': {
+      primaryColor: '#2563eb',
+      secondaryColor: '#06b6d4',
+      institutionName: 'Laboratorio Central',
+      ritualTagline: 'Precisión Diagnóstica',
+    },
+    'UCI': {
+      primaryColor: '#7c3aed',
+      secondaryColor: '#ec4899',
+      institutionName: 'Unidad de Cuidados Intensivos',
+      ritualTagline: 'Vigilancia Crítica',
+    },
+    'QUIRÓFANO': {
+      primaryColor: '#0891b2',
+      secondaryColor: '#ffffff',
+      institutionName: 'Block Quirúrgico',
+      ritualTagline: 'Excelencia Quirúrgica',
+    },
+  };
+  
+  return tenants[ritualId] || { ...DEFAULT_TENANT_CONFIG, institutionName: ritualId };
+};
+
 export const RitualProvider: React.FC<{ children: React.ReactNode; role: ParticipantRole }> = ({ children, role }) => {
-  const { state, updateData, changePhase, refortifySilo, findMatchingSilo, isBoard, sessionId } = useSasquachSync(role);
+  const { state, updateData, changePhase, refortifySilo, findMatchingSilo, isBoard, sessionId, ritualId } = useSasquachSync(role);
+
+  const tenantConfig = useMemo(() => getTenantConfigFromRitualId(ritualId), [ritualId]);
 
   const nextPhase = () => {
     const phases: RitualPhase[] = ['WHY', 'INQUIRY', 'CONVERGENCE', 'DESIGN'];
@@ -49,7 +90,9 @@ export const RitualProvider: React.FC<{ children: React.ReactNode; role: Partici
       findMatchingSilo,
       role,
       sessionId,
-      isBoard
+      ritualId,
+      isBoard,
+      tenantConfig,
     }}>
       {children}
     </RitualContext.Provider>

@@ -5,6 +5,22 @@ import { BroadcastTransport } from '../sync/BroadcastTransport';
 
 const SIMILARITY_THRESHOLD = 0.8;
 
+const getRitualIdFromUrl = (): string => {
+  const params = new URLSearchParams(window.location.search);
+  const roomParam = params.get('room');
+  if (roomParam && roomParam.trim()) {
+    return roomParam.trim().toUpperCase();
+  }
+  return 'LOBBY';
+};
+
+const getChannelName = (ritualId: string): string => `sasquach_ritual_${ritualId}`;
+
+const ritualIdGlobal = getRitualIdFromUrl();
+const CHANNEL_NAME = getChannelName(ritualIdGlobal);
+
+console.log(`[RITUAL_ID] Initialized with ritualId: "${ritualIdGlobal}", channel: "${CHANNEL_NAME}"`);
+
 const normalizeSiloName = (name: string): string => {
   return name
     .toLowerCase()
@@ -123,20 +139,34 @@ const initialState: RoomState = {
   status: 'active',
   currentPhase: 'WHY',
   context: {
+    ritualId: ritualIdGlobal,
     whySummary: '',
     whyResponses: [],
     areaHeads: [],
     rootCauses: [],
     actionProposals: [],
     selectedSilo: null,
+    ruptureCommitment: null,
   },
   mermaidCode: '',
   frictionMap: [],
 };
 
 export const useSasquachSync = (role: ParticipantRole) => {
-  const [state, setState] = useState<RoomState>(initialState);
-  const transportRef = useRef<ITransport | null>(null);
+  const [state, setState] = useState<RoomState>(() => {
+    const urlRitualId = getRitualIdFromUrl();
+    return {
+      ...initialState,
+      context: {
+        ...initialState.context,
+        ritualId: urlRitualId,
+      },
+    };
+  });
+  
+  const [currentRitualId, setCurrentRitualId] = useState<string>(() => getRitualIdFromUrl());
+  const currentRitualIdRef = useRef<string>(currentRitualId);
+  currentRitualIdRef.current = currentRitualId;
   
   const getSessionId = (): string => {
     const STORAGE_KEY = 'sasquach_voter_id';
@@ -154,10 +184,66 @@ export const useSasquachSync = (role: ParticipantRole) => {
   const sessionIdRef = useRef<string>(getSessionId());
   const sessionId = sessionIdRef.current;
 
-  if (!transportRef.current) {
-    transportRef.current = new BroadcastTransport();
-  }
-  const transport = transportRef.current;
+  // CREAR TRANSPORT INMEDIATAMENTE (no en useEffect)
+  const transportRef = useRef<ITransport | null>(null);
+  const getOrCreateTransport = (): ITransport => {
+    if (!transportRef.current) {
+      const channelName = getChannelName(currentRitualId);
+      transportRef.current = new BroadcastTransport(channelName);
+      console.log(`[SYNC] Connecting to channel: "${channelName}" (ritualId: "${currentRitualId}")`);
+    }
+    return transportRef.current;
+  };
+  const transport = getOrCreateTransport();
+
+  useEffect(() => {
+    let isUpdating = false;
+    
+    const handleUrlChange = () => {
+      if (isUpdating) return;
+      
+      const newRitualId = getRitualIdFromUrl();
+      const currentId = currentRitualIdRef.current;
+      
+      console.log(`[URL_SYNC] URL changed. New ritualId: "${newRitualId}", current: "${currentId}"`);
+      
+      if (newRitualId !== currentId) {
+        isUpdating = true;
+        console.log(`[URL_SYNC] Ritual ID changed from "${currentId}" to "${newRitualId}"`);
+        
+        if (transportRef.current) {
+          console.log(`[URL_SYNC] Closing old transport channel`);
+          transportRef.current.close();
+          transportRef.current = null;
+        }
+        
+        const newChannelName = getChannelName(newRitualId);
+        transportRef.current = new BroadcastTransport(newChannelName);
+        console.log(`[URL_SYNC] Created new transport with channel: "${newChannelName}"`);
+        
+        setCurrentRitualId(newRitualId);
+        currentRitualIdRef.current = newRitualId;
+        
+        setState((prev) => ({
+          ...prev,
+          context: {
+            ...prev.context,
+            ritualId: newRitualId,
+          },
+        }));
+        
+        setTimeout(() => { isUpdating = false; }, 100);
+      }
+    };
+    
+    window.addEventListener('popstate', handleUrlChange);
+    const intervalId = setInterval(handleUrlChange, 500);
+    
+    return () => {
+      window.removeEventListener('popstate', handleUrlChange);
+      clearInterval(intervalId);
+    };
+  }, []);
 
   const stateRef = useRef<RoomState>(state);
   
@@ -180,11 +266,38 @@ export const useSasquachSync = (role: ParticipantRole) => {
         if (key === 'areaHeads' && Array.isArray(incoming) && Array.isArray(current)) {
           const prevHeads = current as AreaHead[];
           const incomingHeads = incoming as AreaHead[];
-          console.log(`[MERGE_STATE] areaHeads: Full replacement. Previous: ${prevHeads.length}, Incoming: ${incomingHeads.length}`);
+          
+          if (incomingHeads.length === 0) {
+            console.log(`[MERGE_STATE] areaHeads: Incoming is empty, keeping existing: ${prevHeads.length}`);
+            return;
+          }
+          
+          console.log(`[MERGE_STATE] areaHeads: Merging by role. Previous: ${prevHeads.length}, Incoming: ${incomingHeads.length}`);
           console.log(`[MERGE_STATE] Previous areaHeads:`, prevHeads.map(a => a.role));
           console.log(`[MERGE_STATE] Incoming areaHeads:`, incomingHeads.map(a => a.role));
-          mergedContext.areaHeads = incomingHeads;
+          
+          const merged = [...prevHeads];
+          incomingHeads.forEach((incomingSilo) => {
+            const existingIndex = merged.findIndex(s => s.role === incomingSilo.role);
+            if (existingIndex >= 0) {
+              if (incomingSilo.weight > merged[existingIndex].weight) {
+                merged[existingIndex] = incomingSilo;
+              }
+            } else {
+              merged.push(incomingSilo);
+            }
+          });
+          
+          mergedContext.areaHeads = merged;
           return;
+        }
+
+        if (key === 'actionProposals' && Array.isArray(incoming) && Array.isArray(current)) {
+          const prevProposals = current as any[];
+          const incomingProposals = incoming as any[];
+          console.log(`[MERGE_STATE] actionProposals: Merging. Previous: ${prevProposals.length}, Incoming: ${incomingProposals.length}`);
+          console.log(`[MERGE_STATE] Previous proposals:`, prevProposals.map((p: any) => p.text?.slice(0, 20)));
+          console.log(`[MERGE_STATE] Incoming proposals:`, incomingProposals.map((p: any) => p.text?.slice(0, 20)));
         }
 
         if (Array.isArray(incoming) && Array.isArray(current)) {
@@ -311,13 +424,27 @@ export const useSasquachSync = (role: ParticipantRole) => {
   useEffect(() => {
     const unsubscribe = transport.subscribe((event: RitualEvent) => {
       const eventSessionId = (event as any).sessionId;
+      const eventRitualId = (event.payload as any)?.context?.ritualId;
       
-      if (eventSessionId === sessionId) {
-        console.warn(`[SUBSCRIBE] ⛔ Ignoring own event: ${event.type} from ${event.sender} (session: ${eventSessionId?.slice(0,8) || 'unknown'}, mySession: ${sessionId.slice(0,8)})`);
+      if (eventRitualId && eventRitualId !== currentRitualId) {
+        console.log(`[SUBSCRIBE] ⛔ Ignoring event from different ritual: "${eventRitualId}" (my ritual: "${currentRitualId}")`);
         return;
       }
+      
+      const eventSender = (event as any).sender;
+      const isSameSession = eventSessionId === sessionId;
+      const isSameRole = eventSender === role;
+      
+      if (isSameSession && isSameRole) {
+        console.log(`[SUBSCRIBE] ⛔ Ignoring own event (same session AND role): ${event.type} from ${event.sender} (session: ${eventSessionId?.slice(0,8) || 'unknown'}, mySession: ${sessionId.slice(0,8)})`);
+        return;
+      }
+      
+      if (isSameSession && !isSameRole) {
+        console.log(`[SUBSCRIBE] ✓ Accepting event from different role, same session: ${event.type} from ${event.sender} (my role: ${role})`);
+      }
 
-      console.log(`[SUBSCRIBE] Event received: ${event.type} from ${event.sender} (session: ${eventSessionId?.slice(0,8) || 'unknown'})`);
+      console.log(`[SUBSCRIBE] Event received: ${event.type} from ${event.sender} (session: ${eventSessionId?.slice(0,8) || 'unknown'}, ritual: ${eventRitualId || 'unknown'})`);
 
       switch (event.type) {
         case 'SYNC_REQUEST':
@@ -347,12 +474,14 @@ export const useSasquachSync = (role: ParticipantRole) => {
             const migratedPayload: Partial<RoomState> = {
               ...payload,
               context: {
+                ritualId: ritualIdGlobal,
                 whySummary: payload.context?.whySummary || '',
                 whyResponses: payload.context?.whyResponses || [],
                 rootCauses: payload.context?.rootCauses || [],
                 areaHeads: [],
                 actionProposals: [],
                 selectedSilo: null,
+                ruptureCommitment: null,
               },
             };
             setState((prev) => mergeState(prev, migratedPayload));
@@ -382,12 +511,14 @@ export const useSasquachSync = (role: ParticipantRole) => {
             const migratedPayload: Partial<RoomState> = {
               ...payload,
               context: {
+                ritualId: ritualIdGlobal,
                 whySummary: payload.context?.whySummary || '',
                 whyResponses: payload.context?.whyResponses || [],
                 rootCauses: payload.context?.rootCauses || [],
                 areaHeads: [],
                 actionProposals: [],
                 selectedSilo: null,
+                ruptureCommitment: null,
               },
             };
             setState((prev) => mergeState(prev, migratedPayload));
@@ -447,9 +578,17 @@ export const useSasquachSync = (role: ParticipantRole) => {
     
     console.log(`[UPDATE_DATA] setState called. Transport publish queued.`);
     
+    const enrichedData = {
+      ...newData,
+      context: {
+        ...newData.context,
+        ritualId: currentRitualId,
+      },
+    };
+    
     transport.publish({
       type: 'DATA_UPDATE',
-      payload: newData,
+      payload: enrichedData,
       sender: role,
       timestamp: Date.now(),
       sessionId,
@@ -478,6 +617,7 @@ export const useSasquachSync = (role: ParticipantRole) => {
     findMatchingSilo: (name: string) => findMatchingSilo(state.context.areaHeads, name),
     role,
     sessionId,
+    ritualId: currentRitualId,
     isBoard: role === 'BOARD'
   };
 };
