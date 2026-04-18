@@ -22,3 +22,6 @@ dist/
 # Test files
 test-sync.mjs
 *.ts.timestamp-*
+
+# Environment files (local only)
+.env
