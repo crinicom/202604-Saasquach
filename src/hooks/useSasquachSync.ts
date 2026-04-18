@@ -2,6 +2,11 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { RoomState, RitualPhase, RitualEvent, ParticipantRole, AreaHead, RefortifySiloPayload, Voter } from '../types';
 import { ITransport } from '../sync/transport';
 import { BroadcastTransport } from '../sync/BroadcastTransport';
+import { createSupabaseTransport } from '../sync/SupabaseTransport';
+
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
+const SUPABASE_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
+const USE_SUPABASE = Boolean(SUPABASE_URL && SUPABASE_KEY);
 
 const SIMILARITY_THRESHOLD = 0.8;
 
@@ -188,9 +193,14 @@ export const useSasquachSync = (role: ParticipantRole) => {
   const transportRef = useRef<ITransport | null>(null);
   const getOrCreateTransport = (): ITransport => {
     if (!transportRef.current) {
-      const channelName = getChannelName(currentRitualId);
-      transportRef.current = new BroadcastTransport(channelName);
-      console.log(`[SYNC] Connecting to channel: "${channelName}" (ritualId: "${currentRitualId}")`);
+      if (USE_SUPABASE) {
+        transportRef.current = createSupabaseTransport(SUPABASE_URL, SUPABASE_KEY, currentRitualId);
+        console.log(`[SYNC] Using Supabase transport for ritual: "${currentRitualId}"`);
+      } else {
+        const channelName = getChannelName(currentRitualId);
+        transportRef.current = new BroadcastTransport(channelName);
+        console.log(`[SYNC] Using BroadcastChannel: "${channelName}" (ritualId: "${currentRitualId}")`);
+      }
     }
     return transportRef.current;
   };
