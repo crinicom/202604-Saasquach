@@ -604,11 +604,29 @@ interface WeightedSiloNodeProps {
   isDisintegrating?: boolean;
   onContextMenu: (e: React.MouseEvent, node: AreaHead) => void;
   onSelect: (silo: AreaHead) => void;
+  nodeId?: string;
 }
 
-const WeightedSiloNode: React.FC<WeightedSiloNodeProps> = ({ areaHead, index, isNew, isMerged, isSelected, isSelectable, isFaded, isFocused, isDisintegrating, onContextMenu, onSelect }) => {
+const WeightedSiloNode: React.FC<WeightedSiloNodeProps> = ({ areaHead, index, isNew, isMerged, isSelected, isSelectable, isFaded, isFocused, isDisintegrating, onContextMenu, onSelect, nodeId }) => {
   const [isHovered, setIsHovered] = useState(false);
+  const nodeRef = useRef<HTMLDivElement>(null);
   const { weight } = areaHead;
+
+  useEffect(() => {
+    if (!nodeId || !nodeRef.current) return;
+    const updatePosition = () => {
+      if (nodeRef.current) {
+        const rect = nodeRef.current.getBoundingClientRect();
+        window.dispatchEvent(new CustomEvent('silo-position-update', {
+          detail: { nodeId, x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 }
+        }));
+      }
+    };
+    updatePosition();
+    const observer = new ResizeObserver(updatePosition);
+    observer.observe(nodeRef.current);
+    return () => observer.disconnect();
+  }, [nodeId]);
   const isDiscarded = areaHead.status === 'discarded';
   
   const isHeavyWeight = weight > 1.5;
@@ -1081,6 +1099,7 @@ const SiloOrbitRing: React.FC<SiloOrbitRingProps> = ({ areaHeads, previousAreaHe
                     isDisintegrating={isDisintegrating && isSelected}
                     onContextMenu={onContextMenu}
                     onSelect={onSelectSilo}
+                    nodeId={`silo-${idx}`}
                   />
                 </div>
               </foreignObject>
@@ -1688,6 +1707,15 @@ const ActionSwarm: React.FC<ActionSwarmProps> = ({
   onSelectAction 
 }) => {
   const [dimensions, setDimensions] = useState({ width: 0, height: 0, vmin: 0 });
+  const [siloPositions, setSiloPositions] = useState<Record<string, { x: number; y: number }>>({});
+  
+  useEffect(() => {
+    const handleSiloPosition = (e: CustomEvent) => {
+      setSiloPositions(prev => ({ ...prev, [e.detail.nodeId]: { x: e.detail.x, y: e.detail.y } }));
+    };
+    window.addEventListener('silo-position-update', handleSiloPosition as EventListener);
+    return () => window.removeEventListener('silo-position-update', handleSiloPosition as EventListener);
+  }, []);
   
   useEffect(() => {
     const updateDimensions = () => {
@@ -1703,8 +1731,13 @@ const ActionSwarm: React.FC<ActionSwarmProps> = ({
   
   const selectedSiloPosition = useMemo(() => {
     if (!selectedSilo) return null;
+    const idx = areaHeads.findIndex(a => a.role === selectedSilo.role);
+    const nodeId = `silo-${idx}`;
+    if (siloPositions[nodeId]) {
+      return siloPositions[nodeId];
+    }
     return getSiloCenterPosition(selectedSilo.role, areaHeads, dimensions);
-  }, [selectedSilo, areaHeads, dimensions]);
+  }, [selectedSilo, areaHeads, dimensions, siloPositions]);
   
   const filteredActions = useMemo(() => {
     if (!selectedSilo) return [];
