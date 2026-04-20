@@ -503,6 +503,7 @@ interface WeightedOrbProps {
 const WeightedOrb: React.FC<WeightedOrbProps> = ({ entry, weight, position, index, isTransitioning, isWhyPhase, onContextMenu }) => {
   const size = 160 + weight * 80;
   const opacity = 0.3 + weight * 0.7;
+  const zIndex = 20 + index;
 
   return (
     <motion.div
@@ -522,21 +523,25 @@ const WeightedOrb: React.FC<WeightedOrbProps> = ({ entry, weight, position, inde
         ease: isTransitioning ? [0.68, -0.55, 0.27, 1.55] : [0.16, 1, 0.3, 1],
       }}
       onContextMenu={(e) => onContextMenu(e, entry)}
-      className="absolute rounded-full flex items-center justify-center text-center backdrop-blur-md border shadow-2xl cursor-pointer z-20"
+      className="absolute rounded-full flex items-center justify-center text-center backdrop-blur-md border shadow-2xl cursor-pointer"
       style={{
         left: '50%',
         top: '50%',
         minWidth: `${size}px`,
+        maxWidth: `${size}px`,
         minHeight: `${size}px`,
+        maxHeight: `${size}px`,
+        zIndex,
+        overflow: 'hidden',
         background: `radial-gradient(circle, rgba(16, 46, 26, ${0.7 + weight * 0.3}) 0%, rgba(10, 31, 18, ${0.85 + weight * 0.15}) 100%)`,
         borderColor: `rgba(195, 163, 67, ${0.1 + weight * 0.35})`,
         boxShadow: `0 0 ${20 + weight * 30}px rgba(195, 163, 67, ${0.1 + weight * 0.2})`,
       }}
     >
       <motion.div
-        animate={isWhyPhase ? { y: [0, -12, 0] } : {}}
+        animate={isWhyPhase ? { y: [0, -8, 0] } : {}}
         transition={{
-          duration: 4 + index,
+          duration: 3 + (index % 2) * 1.5,
           repeat: isWhyPhase ? Infinity : 0,
           ease: "easeInOut",
         }}
@@ -544,8 +549,8 @@ const WeightedOrb: React.FC<WeightedOrbProps> = ({ entry, weight, position, inde
         <span className="text-[9px] uppercase tracking-[0.4em] text-sasquach-gold/60 font-bold mb-2 block font-sans">
           {entry.role}
         </span>
-        <p className="text-stone-100 text-base font-serif italic leading-snug px-4">
-          "{entry.text.length > 50 ? entry.text.substring(0, 50) + '...' : entry.text}"
+        <p className="text-stone-100 text-base font-serif italic leading-snug px-3 block w-full overflow-hidden">
+          <span className="line-clamp-3">"{entry.text}"</span>
         </p>
       </motion.div>
       
@@ -1222,11 +1227,25 @@ export const BoardView: React.FC = () => {
 
   const orbPositions = useMemo(() => {
     const sortedResponses = [...whyResponses].sort((a, b) => b.weight - a.weight);
+    const count = sortedResponses.length;
+    if (count === 0) return [];
+    
     return sortedResponses.map((_, idx) => {
-      const angle = (idx / Math.max(whyResponses.length, 1)) * Math.PI * 2;
-      const radius = 15 + (idx % 3) * 8;
-      const x = 50 + Math.cos(angle) * radius;
-      const y = 45 + Math.sin(angle) * radius;
+      const angleBase = (idx / Math.max(count, 1)) * Math.PI * 2;
+      const angle = angleBase + (Math.random() - 0.5) * 0.3;
+      
+      const tier = Math.min(idx, 2);
+      const radiusBase = 18 + tier * 12;
+      const radius = radiusBase + (Math.random() - 0.5) * 10;
+      
+      const centerX = 50;
+      const centerY = 50;
+      const rawX = centerX + Math.cos(angle) * radius;
+      const rawY = centerY + Math.sin(angle) * radius;
+      
+      const x = Math.max(15, Math.min(85, rawX));
+      const y = Math.max(20, Math.min(80, rawY));
+      
       return { x, y };
     });
   }, [whyResponses.length]);
@@ -1384,9 +1403,9 @@ export const BoardView: React.FC = () => {
 
         <AnimatePresence mode="wait">
           {currentPhase === 'WHY' && (
-            <div className="absolute inset-0 z-20 pl-64">
+            <div className="absolute inset-0 z-20 pl-64 w-full h-full">
               <AnimatePresence mode="popLayout">
-                {sortedOrbs.map((entry) => {
+                {sortedOrbs.map((entry, displayIdx) => {
                   const origIdx = whyResponses.findIndex(r => r.timestamp === entry.timestamp);
                   const position = orbPositions[origIdx] || { x: 50, y: 45 };
                   return (
@@ -1395,7 +1414,7 @@ export const BoardView: React.FC = () => {
                       entry={entry}
                       weight={entry.weight}
                       position={position}
-                      index={origIdx}
+                      index={displayIdx}
                       isTransitioning={isTransitioning}
                       isWhyPhase={true}
                       onContextMenu={(e, node) => handleContextMenu(e, node, 'why')}
