@@ -1,14 +1,9 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { RoomState, RitualPhase, RitualEvent, ParticipantRole, AreaHead, RefortifySiloPayload, Voter } from '../types';
-import { ITransport } from '../sync/transport';
-import { BroadcastTransport } from '../sync/BroadcastTransport';
-import { createSupabaseTransport } from '../sync/SupabaseTransport';
+import { createClient, SupabaseClient } from '@supabase/supabase-js';
+import { RoomState, RitualPhase, ParticipantRole, RefortifySiloPayload, AreaHead } from '../types';
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 const SUPABASE_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
-const USE_SUPABASE = Boolean(SUPABASE_URL && SUPABASE_KEY);
-
-const SIMILARITY_THRESHOLD = 0.8;
 
 const getRitualIdFromUrl = (): string => {
   const params = new URLSearchParams(window.location.search);
@@ -18,13 +13,6 @@ const getRitualIdFromUrl = (): string => {
   }
   return 'LOBBY';
 };
-
-const getChannelName = (ritualId: string): string => `sasquach_ritual_${ritualId}`;
-
-const ritualIdGlobal = getRitualIdFromUrl();
-const CHANNEL_NAME = getChannelName(ritualIdGlobal);
-
-console.log(`[RITUAL_ID] Initialized with ritualId: "${ritualIdGlobal}", channel: "${CHANNEL_NAME}"`);
 
 const normalizeSiloName = (name: string): string => {
   return name
@@ -77,7 +65,6 @@ const calculateSimilarity = (a: string, b: string): number => {
   const normB = normalizeSiloName(b);
   
   if (normA === normB) return 1.0;
-  
   if (normA.includes(normB) || normB.includes(normA)) return 0.9;
   
   const common = longestCommonSubstring(normA, normB);
@@ -88,9 +75,9 @@ const calculateSimilarity = (a: string, b: string): number => {
   
   for (const [key, aliases] of Object.entries(ALIAS_MAP)) {
     const allTerms = [key, ...aliases];
-    const inA = allTerms.some(term => normA.includes(term));
-    const inB = allTerms.some(term => normB.includes(term));
-    if (inA && inB) return 0.85;
+    if (allTerms.some(term => normA.includes(term)) && allTerms.some(term => normB.includes(term))) {
+      return 0.85;
+    }
   }
   
   const wordsA = normA.split(/\s+/);
@@ -103,44 +90,12 @@ const calculateSimilarity = (a: string, b: string): number => {
   return 0;
 };
 
-const findMatchingSilo = (
-  silos: AreaHead[],
-  newName: string
-): { silo: AreaHead | null; similarity: number } => {
-  const normalizedNew = normalizeSiloName(newName);
-  let bestMatch: AreaHead | null = null;
-  let bestSimilarity = 0;
-  
-  for (const silo of silos) {
-    if (silo.status === 'discarded') continue;
-    
-    const normalizedExisting = normalizeSiloName(silo.role);
-    
-    if (normalizedNew === normalizedExisting) {
-      console.log(`[FIND_MATCH] Exact match: "${normalizedNew}" === "${normalizedExisting}"`);
-      return { silo, similarity: 1.0 };
-    }
-    
-    const similarity = calculateSimilarity(silo.role, newName);
-    console.log(`[FIND_MATCH] Comparing "${normalizedNew}" with "${normalizedExisting}": similarity=${similarity.toFixed(2)}`);
-    
-    if (similarity > bestSimilarity && similarity >= SIMILARITY_THRESHOLD) {
-      bestSimilarity = similarity;
-      bestMatch = silo;
-    }
-  }
-  
-  if (bestMatch) {
-    console.log(`[FIND_MATCH] Best match: "${bestMatch.role}" with similarity ${bestSimilarity.toFixed(2)}`);
-  } else {
-    console.log(`[FIND_MATCH] No match found for "${normalizedNew}" (threshold: ${SIMILARITY_THRESHOLD})`);
-  }
-  
-  return { silo: bestMatch, similarity: bestSimilarity };
-};
+const ritualIdGlobal = getRitualIdFromUrl();
+
+console.log(`[SUPABASE_SYNC] Initialized with ritualId: "${ritualIdGlobal}"`);
 
 const initialState: RoomState = {
-  roomId: 'forest-room-1',
+  roomId: ritualIdGlobal,
   status: 'active',
   currentPhase: 'WHY',
   context: {
@@ -157,6 +112,13 @@ const initialState: RoomState = {
   frictionMap: [],
 };
 
+let supabase: SupabaseClient | null = null;
+
+if (SUPABASE_URL && SUPABASE_KEY) {
+  supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
+  console.log(`[SUPABASE_SYNC] Client created for ${SUPABASE_URL}`);
+}
+
 export const useSasquachSync = (role: ParticipantRole) => {
   const [state, setState] = useState<RoomState>(() => {
     const urlRitualId = getRitualIdFromUrl();
@@ -169,9 +131,7 @@ export const useSasquachSync = (role: ParticipantRole) => {
     };
   });
   
-  const [currentRitualId, setCurrentRitualId] = useState<string>(() => getRitualIdFromUrl());
-  const currentRitualIdRef = useRef<string>(currentRitualId);
-  currentRitualIdRef.current = currentRitualId;
+  const currentRitualId = getRitualIdFromUrl();
   
   const getSessionId = (): string => {
     const STORAGE_KEY = 'sasquach_voter_id';
@@ -179,120 +139,99 @@ export const useSasquachSync = (role: ParticipantRole) => {
     if (!sessionId) {
       sessionId = crypto.randomUUID();
       localStorage.setItem(STORAGE_KEY, sessionId);
-      console.log(`[SESSION] New sessionId generated and stored: ${sessionId}`);
-    } else {
-      console.log(`[SESSION] Restored sessionId from storage: ${sessionId}`);
+      console.log(`[SESSION] New sessionId generated: ${sessionId}`);
     }
     return sessionId;
   };
   
   const sessionIdRef = useRef<string>(getSessionId());
   const sessionId = sessionIdRef.current;
-
-  // CREAR TRANSPORT INMEDIATAMENTE (no en useEffect)
-  const transportRef = useRef<ITransport | null>(null);
-  const getOrCreateTransport = (): ITransport => {
-    if (!transportRef.current) {
-      if (USE_SUPABASE) {
-        transportRef.current = createSupabaseTransport(SUPABASE_URL, SUPABASE_KEY, currentRitualId);
-        console.log(`[SYNC] Using Supabase transport for ritual: "${currentRitualId}"`);
-      } else {
-        const channelName = getChannelName(currentRitualId);
-        transportRef.current = new BroadcastTransport(channelName);
-        console.log(`[SYNC] Using BroadcastChannel: "${channelName}" (ritualId: "${currentRitualId}")`);
-      }
-    }
-    return transportRef.current;
-  };
-  const transport = getOrCreateTransport();
-
-  useEffect(() => {
-    let isUpdating = false;
-    
-    const handleUrlChange = () => {
-      if (isUpdating) return;
-      
-      const newRitualId = getRitualIdFromUrl();
-      const currentId = currentRitualIdRef.current;
-      
-      console.log(`[URL_SYNC] URL changed. New ritualId: "${newRitualId}", current: "${currentId}"`);
-      
-      if (newRitualId !== currentId) {
-        isUpdating = true;
-        console.log(`[URL_SYNC] Ritual ID changed from "${currentId}" to "${newRitualId}"`);
-        
-        if (transportRef.current) {
-          console.log(`[URL_SYNC] Closing old transport channel`);
-          transportRef.current.close();
-          transportRef.current = null;
-        }
-        
-        if (USE_SUPABASE) {
-          transportRef.current = createSupabaseTransport(SUPABASE_URL, SUPABASE_KEY, newRitualId);
-          console.log(`[URL_SYNC] Created new Supabase transport for: "${newRitualId}"`);
-        } else {
-          const newChannelName = getChannelName(newRitualId);
-          transportRef.current = new BroadcastTransport(newChannelName);
-          console.log(`[URL_SYNC] Created new BroadcastChannel: "${newChannelName}"`);
-        }
-        
-        setCurrentRitualId(newRitualId);
-        currentRitualIdRef.current = newRitualId;
-        
-        setState((prev) => ({
-          ...prev,
-          context: {
-            ...prev.context,
-            ritualId: newRitualId,
-          },
-        }));
-        
-        setTimeout(() => { isUpdating = false; }, 100);
-      }
-    };
-    
-    window.addEventListener('popstate', handleUrlChange);
-    const intervalId = setInterval(handleUrlChange, 500);
-    
-    return () => {
-      window.removeEventListener('popstate', handleUrlChange);
-      clearInterval(intervalId);
-    };
-  }, []);
-
+  
   const stateRef = useRef<RoomState>(state);
+  const actionProposalsRef = useRef<any[]>([]);
   
   useEffect(() => {
     stateRef.current = state;
-    console.log(`[USE_SASQUACH_SYNC] State updated. currentPhase: ${state.currentPhase}, areaHeads: ${state.context.areaHeads.length}`);
+    actionProposalsRef.current = state.context.actionProposals;
   }, [state]);
-
+  
+  useEffect(() => {
+    if (!supabase || !currentRitualId) return;
+    
+    console.log(`[SUPABASE_SYNC] Subscribing to INSERT on actions table for ritual: ${currentRitualId}`);
+    
+    const channel = supabase.channel(`ritual-${currentRitualId}`)
+      .on('postgres_changes', {
+        event: 'INSERT',
+        schema: 'public',
+        table: 'actions',
+        filter: `ritual_id=eq.${currentRitualId}`,
+      }, (payload) => {
+        const newAction = payload.new;
+        console.log(`[SUPABASE_SYNC] 📥 INSERT received:`, newAction);
+        
+        const incomingProposals = actionProposalsRef.current || [];
+        
+        const exists = incomingProposals.some(
+          p => p.id === newAction.id || (p.sessionId === newAction.sessionId && p.text === newAction.text)
+        );
+        
+        if (!exists) {
+          console.log(`[SUPABASE_SYNC] Adding new action proposal to state: ${newAction.text?.slice(0, 30)}...`);
+          
+          setState((prev) => {
+            const newProposal = {
+              id: newAction.id,
+              siloRole: newAction.silo_role,
+              role: newAction.role,
+              sessionId: newAction.session_id,
+              text: newAction.text,
+              timestamp: newAction.timestamp,
+              weight: 0.5,
+            };
+            
+            return {
+              ...prev,
+              context: {
+                ...prev.context,
+                actionProposals: [...prev.context.actionProposals, newProposal],
+              },
+            };
+          });
+        } else {
+          console.log(`[SUPABASE_SYNC] Duplicate action, ignoring`);
+        }
+      })
+      .subscribe((status) => {
+        console.log(`[SUPABASE_SYNC] Subscription status: ${status}`);
+      });
+    
+    return () => {
+      console.log(`[SUPABASE_SYNC] Cleaning up subscription`);
+      supabase?.removeChannel(channel);
+    };
+  }, [currentRitualId]);
+  
   const mergeState = useCallback((prev: RoomState, patch: Partial<RoomState>): RoomState => {
     const newState = { ...prev, ...patch };
     
     if (patch.context && prev.context) {
-      const mergedContext = { ...prev.context };
-      const patchContext = patch.context;
+      newState.context = { ...prev.context };
       
-      (Object.keys(patchContext) as Array<keyof typeof patchContext>).forEach((key) => {
-        const incoming = patchContext[key];
-        const current = prev.context[key];
-
+      for (const [key, value] of Object.entries(patch.context)) {
+        const current = (prev.context as any)[key];
+        const incoming = value;
+        
+        console.log(`[MERGE_STATE] Processing key: ${key}`);
+        
         if (key === 'areaHeads' && Array.isArray(incoming) && Array.isArray(current)) {
-          const prevHeads = current as AreaHead[];
-          const incomingHeads = incoming as AreaHead[];
-          
-          if (incomingHeads.length === 0) {
-            console.log(`[MERGE_STATE] areaHeads: Incoming is empty, keeping existing: ${prevHeads.length}`);
-            return;
+          if (incoming.length === 0) {
+            console.log(`[MERGE_STATE] areaHeads: Incoming empty, keeping existing: ${current.length}`);
+            continue;
           }
           
-          console.log(`[MERGE_STATE] areaHeads: Merging by role. Previous: ${prevHeads.length}, Incoming: ${incomingHeads.length}`);
-          console.log(`[MERGE_STATE] Previous areaHeads:`, prevHeads.map(a => a.role));
-          console.log(`[MERGE_STATE] Incoming areaHeads:`, incomingHeads.map(a => a.role));
-          
-          const merged = [...prevHeads];
-          incomingHeads.forEach((incomingSilo) => {
+          const merged = [...current];
+          incoming.forEach((incomingSilo: AreaHead) => {
             const existingIndex = merged.findIndex(s => s.role === incomingSilo.role);
             if (existingIndex >= 0) {
               if (incomingSilo.weight > merged[existingIndex].weight) {
@@ -303,18 +242,10 @@ export const useSasquachSync = (role: ParticipantRole) => {
             }
           });
           
-          mergedContext.areaHeads = merged;
-          return;
+          newState.context.areaHeads = merged;
+          continue;
         }
-
-        if (key === 'actionProposals' && Array.isArray(incoming) && Array.isArray(current)) {
-          const prevProposals = current as any[];
-          const incomingProposals = incoming as any[];
-          console.log(`[MERGE_STATE] actionProposals: Merging. Previous: ${prevProposals.length}, Incoming: ${incomingProposals.length}`);
-          console.log(`[MERGE_STATE] Previous proposals:`, prevProposals.map((p: any) => p.text?.slice(0, 20)));
-          console.log(`[MERGE_STATE] Incoming proposals:`, incomingProposals.map((p: any) => p.text?.slice(0, 20)));
-        }
-
+        
         if (Array.isArray(incoming) && Array.isArray(current)) {
           const merged = [...current];
           incoming.forEach((item: any) => {
@@ -332,329 +263,110 @@ export const useSasquachSync = (role: ParticipantRole) => {
               merged.push(item);
             }
           });
-          (mergedContext as any)[key] = merged;
-        } else if (key === 'selectedSilo') {
-          (mergedContext as any)[key] = incoming;
-          console.log(`[MERGE_STATE] selectedSilo merged: "${incoming}"`);
+          (newState.context as any)[key] = merged;
         } else {
-          (mergedContext as any)[key] = incoming;
+          (newState.context as any)[key] = incoming;
         }
-      });
-
-      newState.context = mergedContext;
+      }
     }
-    console.log(`[MERGE_STATE] State merge complete. areaHeads: ${newState.context.areaHeads.map(a => a.role).join(', ')}`);
+    
     return newState;
   }, []);
-
-  const handleRefortifySilo = useCallback((payload: RefortifySiloPayload) => {
-    const { areaName, successMetric, voterRole, sessionId: voterSessionId } = payload;
-    
-    console.log(`[REFORTIFY] === INICIO ===`);
-    console.log(`[REFORTIFY] Payload received:`, { areaName, successMetric, voterRole, voterSessionId });
-    
-    const currentSilos = stateRef.current.context.areaHeads;
-    console.log(`[REFORTIFY] Current silos in state:`, currentSilos.length);
-    currentSilos.forEach((s, i) => {
-      console.log(`[REFORTIFY]   [${i}] "${s.role}" - votedBy: ${s.votedBy.map(v => `${v.role}:${v.sessionId.slice(0,8)}`).join(', ')}, weight: ${s.weight}`);
-    });
-    
-    const { silo: matchingSilo } = findMatchingSilo(currentSilos, areaName);
-    
-    if (matchingSilo) {
-      console.log(`[REFORTIFY] Match found: "${matchingSilo.role}"`);
-      console.log(`[REFORTIFY] Current votedBy:`, matchingSilo.votedBy.map(v => `${v.role}:${v.sessionId.slice(0,8)}`));
-      console.log(`[REFORTIFY] voterRole to check: "${voterRole}", sessionId: "${voterSessionId?.slice(0,8)}"`);
-      
-      const alreadyVoted = matchingSilo.votedBy.some(v => v.role === voterRole && v.sessionId === voterSessionId);
-      console.log(`[REFORTIFY] Already voted? ${alreadyVoted}`);
-      
-      if (alreadyVoted) {
-        console.log(`[REFORTIFY] BLOCKING - ${voterRole}:${voterSessionId?.slice(0,8)} already voted for this silo`);
-        console.log(`[REFORTIFY] === FIN (BLOQUEADO) ===`);
-        return;
-      }
-      
-      const newWeight = Math.min(1, matchingSilo.weight + 0.15);
-      console.log(`[REFORTIFY] Weight: ${matchingSilo.weight} -> ${newWeight}`);
-      
-      const newVoter: Voter = {
-        role: voterRole,
-        sessionId: voterSessionId || sessionId,
-        timestamp: Date.now(),
-      };
-      
-      const updatedSilos = currentSilos.map(s => 
-        s.role === matchingSilo.role
-          ? { ...s, weight: newWeight, votedBy: [...s.votedBy, newVoter] }
-          : s
-      );
-      
-      console.log(`[REFORTIFY] Updating silo "${matchingSilo.role}" with new votedBy`);
-      console.log(`[REFORTIFY] === FIN (ACTUALIZADO) ===`);
-      
-      setState(prev => mergeState(prev, { context: { ...prev.context, areaHeads: updatedSilos } }));
-      
-      transport.publish({
-        type: 'DATA_UPDATE',
-        payload: { context: { ...stateRef.current.context, areaHeads: updatedSilos } },
-        sender: role,
-        timestamp: Date.now(),
-        sessionId,
-      } as any);
-    } else {
-      console.log(`[REFORTIFY] No match found - creating new silo`);
-      
-      const newVoter: Voter = {
-        role: voterRole,
-        sessionId: voterSessionId || sessionId,
-        timestamp: Date.now(),
-      };
-      
-      const newSilo: AreaHead = {
-        role: areaName,
-        successMetric: successMetric || '',
-        weight: 1,
-        status: 'active',
-        votedBy: [newVoter],
-      };
-      
-      console.log(`[REFORTIFY] New silo:`, newSilo);
-      console.log(`[REFORTIFY] === FIN (NUEVO) ===`);
-      
-      const updatedSilos = [...currentSilos, newSilo];
-      
-      setState(prev => mergeState(prev, { context: { ...prev.context, areaHeads: updatedSilos } }));
-      
-      transport.publish({
-        type: 'DATA_UPDATE',
-        payload: { context: { ...stateRef.current.context, areaHeads: updatedSilos } },
-        sender: role,
-        timestamp: Date.now(),
-        sessionId,
-      } as any);
-    }
-  }, [mergeState, role, transport, sessionId]);
-
-  useEffect(() => {
-    const unsubscribe = transport.subscribe((event: RitualEvent) => {
-      const eventSessionId = (event as any).sessionId;
-      const eventRitualId = (event.payload as any)?.context?.ritualId;
-      
-      if (eventRitualId && eventRitualId !== currentRitualId) {
-        console.log(`[SUBSCRIBE] ⛔ Ignoring event from different ritual: "${eventRitualId}" (my ritual: "${currentRitualId}")`);
-        return;
-      }
-      
-      const eventSender = (event as any).sender;
-      const isSameSession = eventSessionId === sessionId;
-      const isSameRole = eventSender === role;
-      
-      if (isSameSession && isSameRole) {
-        console.log(`[SUBSCRIBE] ⛔ Ignoring own event (same session AND role): ${event.type} from ${event.sender} (session: ${eventSessionId?.slice(0,8) || 'unknown'}, mySession: ${sessionId.slice(0,8)})`);
-        return;
-      }
-      
-      if (isSameSession && !isSameRole) {
-        console.log(`[SUBSCRIBE] ✓ Accepting event from different role, same session: ${event.type} from ${event.sender} (my role: ${role})`);
-      }
-
-      console.log(`[SUBSCRIBE] Event received: ${event.type} from ${event.sender} (session: ${eventSessionId?.slice(0,8) || 'unknown'}, ritual: ${eventRitualId || 'unknown'})`);
-
-      switch (event.type) {
-        case 'SYNC_REQUEST':
-          console.log(`[SUBSCRIBE] Sending SYNC_RESPONSE as BOARD`);
-          if (role === 'BOARD') {
-            transport.publish({
-              type: 'SYNC_RESPONSE',
-              payload: stateRef.current,
-              sender: 'BOARD',
-              timestamp: Date.now(),
-              sessionId,
-            } as any);
-          }
-          break;
-
-        case 'SYNC_RESPONSE': {
-          console.log(`[SUBSCRIBE] Processing SYNC_RESPONSE, updating state`);
-          console.log(`[SUBSCRIBE]   selectedSilo in SYNC: "${(event.payload as any)?.context?.selectedSilo}"`);
-          const payload = event.payload as Partial<RoomState>;
-          
-          const needsSchemaMigration = payload.context?.areaHeads?.some(
-            (ah: any) => Array.isArray(ah.votedBy) && typeof ah.votedBy[0] === 'string'
-          );
-          
-          if (needsSchemaMigration) {
-            console.log(`[SUBSCRIBE] Detected old schema (votedBy as strings), migrating to new schema`);
-            const migratedPayload: Partial<RoomState> = {
-              ...payload,
-              context: {
-                ritualId: ritualIdGlobal,
-                whySummary: payload.context?.whySummary || '',
-                whyResponses: payload.context?.whyResponses || [],
-                rootCauses: payload.context?.rootCauses || [],
-                areaHeads: [],
-                actionProposals: [],
-                selectedSilo: null,
-                ruptureCommitment: null,
-              },
-            };
-            setState((prev) => mergeState(prev, migratedPayload));
-          } else {
-            setState((prev) => mergeState(prev, payload));
-          }
-          break;
-        }
-
-        case 'PHASE_CHANGE':
-          console.log(`[SUBSCRIBE] Phase changing to:`, (event.payload as any)?.currentPhase);
-          setState((prev) => mergeState(prev, event.payload as Partial<RoomState>));
-          break;
-
-        case 'DATA_UPDATE': {
-          console.log(`[SUBSCRIBE] Processing DATA_UPDATE`);
-          console.log(`[SUBSCRIBE]   areaHeads in payload:`, (event.payload as any)?.context?.areaHeads?.length || 0);
-          console.log(`[SUBSCRIBE]   selectedSilo in payload: "${(event.payload as any)?.context?.selectedSilo}"`);
-          const payload = event.payload as Partial<RoomState>;
-          
-          const needsSchemaMigration = payload.context?.areaHeads?.some(
-            (ah: any) => Array.isArray(ah.votedBy) && typeof ah.votedBy[0] === 'string'
-          );
-          
-          if (needsSchemaMigration) {
-            console.log(`[SUBSCRIBE] Detected old schema in DATA_UPDATE, migrating to new schema`);
-            const migratedPayload: Partial<RoomState> = {
-              ...payload,
-              context: {
-                ritualId: ritualIdGlobal,
-                whySummary: payload.context?.whySummary || '',
-                whyResponses: payload.context?.whyResponses || [],
-                rootCauses: payload.context?.rootCauses || [],
-                areaHeads: [],
-                actionProposals: [],
-                selectedSilo: null,
-                ruptureCommitment: null,
-              },
-            };
-            setState((prev) => mergeState(prev, migratedPayload));
-          } else {
-            setState((prev) => mergeState(prev, payload));
-          }
-          break;
-        }
-        
-        case 'REFORTIFY_SILO':
-          console.log(`[SUBSCRIBE] Processing REFORTIFY_SILO from ${event.sender}`);
-          handleRefortifySilo(event.payload as RefortifySiloPayload);
-          break;
-        
-        case 'MISSION_COMPLETE': {
-          const missionPayload = event.payload as any;
-          console.log(`[SUBSCRIBE] 🎉 MISSION_COMPLETE received! Action: ${missionPayload.actionText?.slice(0, 30)}...`);
-          setState((prev) => ({
-            ...prev,
-            context: {
-              ...prev.context,
-              ruptureCommitment: missionPayload.actionText,
-              selectedSilo: null,
-            },
-          }));
-          break;
-        }
-        
-        default:
-          console.log(`[SUBSCRIBE] Unknown event type: ${event.type}`);
-          break;
-      }
-    });
-
-    if (role !== 'BOARD') {
-      console.log(`[INIT] ${role} requesting SYNC`);
-      transport.publish({
-        type: 'SYNC_REQUEST',
-        payload: {},
-        sender: role,
-        timestamp: Date.now(),
-        sessionId,
-      } as any);
-    } else {
-      console.log(`[INIT] BOARD initialized`);
-    }
-
-    return () => {
-      unsubscribe();
-    };
-  }, [role, transport, mergeState, handleRefortifySilo, sessionId]);
-
-  const updateData = useCallback((newData: Partial<RoomState>) => {
-    console.log(`[UPDATE_DATA] === BEGIN ===`);
+  
+  const updateData = useCallback(async (newData: Partial<RoomState>) => {
     console.log(`[UPDATE_DATA] Sending update:`, Object.keys(newData));
-    if (newData.context?.areaHeads) {
-      console.log(`[UPDATE_DATA] areaHeads in update:`, newData.context.areaHeads.map(a => a.role));
-    }
-    if (newData.context?.selectedSilo !== undefined) {
-      console.log(`[UPDATE_DATA] selectedSilo in update: "${newData.context.selectedSilo}"`);
-    }
     
     setState((prev) => {
       const newState = mergeState(prev, newData);
-      console.log(`[UPDATE_DATA] State merged. New areaHeads count:`, newState.context.areaHeads.length);
-      console.log(`[UPDATE_DATA] New areaHeads:`, newState.context.areaHeads.map(a => a.role));
-      console.log(`[UPDATE_DATA] selectedSilo is now: "${newState.context.selectedSilo}"`);
-      console.log(`[UPDATE_DATA] === END ===`);
       return newState;
     });
     
-    console.log(`[UPDATE_DATA] setState called. Transport publish queued.`);
+    if (newData.context?.actionProposals) {
+      const proposals = newData.context.actionProposals;
+      if (proposals.length > 0) {
+        const lastProposal = proposals[proposals.length - 1];
+        
+        console.log(`[UPDATE_DATA] Inserting to Supabase:`, lastProposal.text?.slice(0, 30));
+        
+        if (supabase && lastProposal.text) {
+          const { data, error } = await supabase.from('actions').insert({
+            id: lastProposal.id,
+            ritual_id: currentRitualId,
+            session_id: sessionId,
+            role: role,
+            silo_role: lastProposal.siloRole,
+            text: lastProposal.text,
+            timestamp: lastProposal.timestamp,
+            weight: lastProposal.weight || 0.5,
+          });
+          
+          if (error) {
+            console.error(`[UPDATE_DATA] Supabase insert error:`, error);
+          } else {
+            console.log(`[UPDATE_DATA] Supabase insert success:`, data);
+          }
+        }
+      }
+    }
     
-    const enrichedData = {
-      ...newData,
-      context: {
-        ...newData.context,
-        ritualId: currentRitualId,
-      },
-    };
-    
-    transport.publish({
-      type: 'DATA_UPDATE',
-      payload: enrichedData,
-      sender: role,
-      timestamp: Date.now(),
-      sessionId,
-    } as any);
-  }, [role, transport, mergeState, sessionId]);
-
+    if (newData.context?.areaHeads) {
+      console.log(`[UPDATE_DATA] areaHeads update:`, newData.context.areaHeads.map(a => a.role));
+    }
+  }, [role, mergeState, sessionId]);
+  
   const changePhase = useCallback((newPhase: RitualPhase) => {
     console.log(`[CHANGE_PHASE] Changing to: ${newPhase}`);
-    const payload = { currentPhase: newPhase };
-    setState((prev) => mergeState(prev, payload));
-
-    transport.publish({
-      type: 'PHASE_CHANGE',
-      payload,
-      sender: role,
-      timestamp: Date.now(),
-      sessionId,
-    } as any);
-  }, [role, transport, mergeState, sessionId]);
-
-  const broadcastMissionComplete = useCallback((actionId: string, actionText: string, selectedSilo: string) => {
-    console.log(`[MISSION_COMPLETE] Broadcasting: ${actionText.slice(0, 30)}...`);
-    transport.publish({
-      type: 'MISSION_COMPLETE',
-      payload: { actionId, actionText, selectedSilo },
-      sender: role,
-      timestamp: Date.now(),
-      sessionId,
+    setState((prev) => mergeState(prev, { currentPhase: newPhase }));
+  }, [mergeState]);
+  
+  const handleRefortifySilo = useCallback((payload: RefortifySiloPayload & { sessionId: string }) => {
+    console.log(`[REFORTIFY] area: ${payload.areaName}`);
+    
+    setState((prev) => {
+      const areaHeads = [...prev.context.areaHeads];
+      const existingIdx = areaHeads.findIndex(a => a.role === payload.areaName);
+      
+      if (existingIdx >= 0) {
+        const newWeight = Math.min(3.0, areaHeads[existingIdx].weight + 0.5);
+        areaHeads[existingIdx] = {
+          ...areaHeads[existingIdx],
+          weight: newWeight,
+          status: 'active',
+          votedBy: [...areaHeads[existingIdx].votedBy, { role: payload.voterRole, sessionId: payload.sessionId, timestamp: Date.now() }],
+        };
+      }
+      
+      return {
+        ...prev,
+        context: { ...prev.context, areaHeads },
+      };
     });
-  }, [transport, role, sessionId]);
-
+  }, []);
+  
+  const findMatchingSilo = useCallback((areaHeads: AreaHead[], name: string) => {
+    if (!areaHeads.length || !name) {
+      return { silo: null, similarity: 0 };
+    }
+    
+    let bestMatch = areaHeads[0];
+    let bestSimilarity = 0;
+    
+    for (const silo of areaHeads) {
+      const similarity = calculateSimilarity(name, silo.role);
+      if (similarity > bestSimilarity) {
+        bestSimilarity = similarity;
+        bestMatch = silo;
+      }
+    }
+    
+    return { silo: bestMatch, similarity: bestSimilarity };
+  }, []);
+  
   return {
     state,
     updateData,
     changePhase,
     refortifySilo: handleRefortifySilo,
-    broadcastMissionComplete,
     findMatchingSilo: (name: string) => findMatchingSilo(state.context.areaHeads, name),
     role,
     sessionId,

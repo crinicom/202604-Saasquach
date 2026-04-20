@@ -8,7 +8,6 @@ interface RitualContextType {
   nextPhase: () => void;
   changePhase: (phase: RitualPhase) => void;
   refortifySilo: (payload: RefortifySiloPayload) => void;
-  broadcastMissionComplete: (actionId: string, actionText: string, selectedSilo: string) => void;
   findMatchingSilo: (name: string) => { silo: any; similarity: number };
   role: ParticipantRole;
   sessionId: string;
@@ -57,7 +56,7 @@ const getTenantConfigFromRitualId = (ritualId: string): TenantConfig => {
 };
 
 export const RitualProvider: React.FC<{ children: React.ReactNode; role: ParticipantRole }> = ({ children, role }) => {
-  const { state, updateData, changePhase, refortifySilo, broadcastMissionComplete, findMatchingSilo, isBoard, sessionId, ritualId } = useSasquachSync(role);
+  const { state, updateData, changePhase, refortifySilo, findMatchingSilo, isBoard, sessionId, ritualId } = useSasquachSync(role);
 
   const tenantConfig = useMemo(() => getTenantConfigFromRitualId(ritualId), [ritualId]);
 
@@ -88,7 +87,6 @@ export const RitualProvider: React.FC<{ children: React.ReactNode; role: Partici
       nextPhase,
       changePhase,
       refortifySilo: handleRefortifySilo,
-      broadcastMissionComplete,
       findMatchingSilo,
       role,
       sessionId,
