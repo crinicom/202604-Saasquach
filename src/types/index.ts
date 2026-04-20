@@ -80,7 +80,8 @@ export type RitualEventType =
   | 'FRICTION_TOGGLE' 
   | 'SYNC_REQUEST' 
   | 'SYNC_RESPONSE'
-  | 'REFORTIFY_SILO';
+  | 'REFORTIFY_SILO'
+  | 'MISSION_COMPLETE';
 
 export interface RefortifySiloPayload {
   areaName: string;
@@ -89,11 +90,18 @@ export interface RefortifySiloPayload {
   sessionId: string;
 }
 
+export interface MissionCompletePayload {
+  actionId: string;
+  actionText: string;
+  selectedSilo: string;
+}
+
 export interface RitualEvent {
   type: RitualEventType;
-  payload: Partial<RoomState> | RefortifySiloPayload;
+  payload: Partial<RoomState> | RefortifySiloPayload | MissionCompletePayload;
   sender: ParticipantRole;
   timestamp: number;
+  sessionId?: string;
 }
 
 export interface FrictionPoint {

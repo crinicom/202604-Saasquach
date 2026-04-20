@@ -1134,7 +1134,7 @@ const SiloOrbitRing: React.FC<SiloOrbitRingProps> = ({ areaHeads, previousAreaHe
 };
 
 export const BoardView: React.FC = () => {
-  const { state, role, updateState } = useRitual();
+  const { state, role, updateState, broadcastMissionComplete } = useRitual();
   const { 
     areaHeads, 
     promoteNode, 
@@ -1270,6 +1270,8 @@ export const BoardView: React.FC = () => {
           selectedSilo: null,
         },
       });
+      
+      broadcastMissionComplete(actionId, actionText, selectedSilo?.role || 'unknown');
     }
     
     setTimeout(() => {

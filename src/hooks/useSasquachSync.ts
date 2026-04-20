@@ -548,6 +548,20 @@ export const useSasquachSync = (role: ParticipantRole) => {
           handleRefortifySilo(event.payload as RefortifySiloPayload);
           break;
         
+        case 'MISSION_COMPLETE': {
+          const missionPayload = event.payload as any;
+          console.log(`[SUBSCRIBE] 🎉 MISSION_COMPLETE received! Action: ${missionPayload.actionText?.slice(0, 30)}...`);
+          setState((prev) => ({
+            ...prev,
+            context: {
+              ...prev.context,
+              ruptureCommitment: missionPayload.actionText,
+              selectedSilo: null,
+            },
+          }));
+          break;
+        }
+        
         default:
           console.log(`[SUBSCRIBE] Unknown event type: ${event.type}`);
           break;
@@ -624,11 +638,23 @@ export const useSasquachSync = (role: ParticipantRole) => {
     } as any);
   }, [role, transport, mergeState, sessionId]);
 
+  const broadcastMissionComplete = useCallback((actionId: string, actionText: string, selectedSilo: string) => {
+    console.log(`[MISSION_COMPLETE] Broadcasting: ${actionText.slice(0, 30)}...`);
+    transport.publish({
+      type: 'MISSION_COMPLETE',
+      payload: { actionId, actionText, selectedSilo },
+      sender: role,
+      timestamp: Date.now(),
+      sessionId,
+    });
+  }, [transport, role, sessionId]);
+
   return {
     state,
     updateData,
     changePhase,
     refortifySilo: handleRefortifySilo,
+    broadcastMissionComplete,
     findMatchingSilo: (name: string) => findMatchingSilo(state.context.areaHeads, name),
     role,
     sessionId,
