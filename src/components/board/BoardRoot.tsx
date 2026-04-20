@@ -7,7 +7,7 @@ import { motion } from 'framer-motion';
  * Improved stacking context for visibility.
  */
 export const BoardRoot = () => {
-  const { state } = useRitual();
+  const { state, tenantConfig } = useRitual();
 
   return (
     <div className="min-h-screen bg-stone-950 text-stone-200 overflow-hidden relative font-sans">
@@ -25,15 +25,15 @@ export const BoardRoot = () => {
           <div className="space-y-1">
             <div className="flex items-center gap-3">
               <div className="w-1.5 h-1.5 rounded-full bg-sasquach-gold shadow-[0_0_10px_#c3a343] animate-pulse" />
-              <h2 className="text-stone-500 text-[10px] font-black tracking-[0.5em] uppercase">The Mirror • Collective Intelligence</h2>
+              <h2 className="text-stone-500 text-[10px] font-black tracking-[0.5em] uppercase">The Mirror • {tenantConfig.institutionName}</h2>
             </div>
             <h1 className="text-5xl text-sasquach-gold font-light tracking-tight italic">
               Phase: <span className="font-bold uppercase tracking-normal not-italic text-stone-100">{state.currentPhase}</span>
             </h1>
           </div>
           <div className="text-right glass-panel p-5 rounded-2xl border border-white/5 bg-white/[0.03] backdrop-blur-md">
-            <p className="text-stone-500 text-[9px] uppercase tracking-[0.4em] mb-2">Ritual Node ID</p>
-            <p className="font-mono text-sasquach-gold/80 text-sm tracking-widest">{state.roomId}</p>
+            <p className="text-stone-500 text-[9px] uppercase tracking-[0.4em] mb-2">Ritual ID</p>
+            <p className="font-mono text-sasquach-gold/80 text-sm tracking-widest">{state.context.ritualId}</p>
           </div>
         </header>
 

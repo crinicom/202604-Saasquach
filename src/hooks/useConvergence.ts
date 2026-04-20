@@ -297,12 +297,14 @@ export const useConvergence = (): UseConvergenceReturn => {
 
     updateState({
       context: {
+        ritualId: state.context.ritualId,
         whySummary: state.context.whySummary,
         whyResponses: state.context.whyResponses,
         areaHeads: newAreaHeads,
         rootCauses: state.context.rootCauses,
         actionProposals: state.context.actionProposals,
         selectedSilo: state.context.selectedSilo,
+        ruptureCommitment: state.context.ruptureCommitment,
       },
     });
     

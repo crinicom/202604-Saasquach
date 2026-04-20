@@ -1,21 +1,34 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useRitual } from '../../hooks/useRitual';
+import { navigateTo } from '../../utils/navigation';
 import { ParticipantRole } from '../../types';
 
 export const DevControlPanel: React.FC = () => {
   const [isCollapsed, setIsCollapsed] = useState(false);
-  const { state, updateState, changePhase } = useRitual();
+  const [roomInput, setRoomInput] = useState('');
+  const { state, updateState, changePhase, ritualId, tenantConfig } = useRitual();
+
+  const handleChangeRoom = () => {
+    const newRoomId = roomInput.trim().toUpperCase() || 'LOBBY';
+    navigateTo({ room: newRoomId });
+  };
+
+  const handleQuickRoomChange = (room: string) => {
+    navigateTo({ room });
+  };
 
   const handleReset = () => {
     updateState({
       context: {
+        ritualId: state.context.ritualId,
         whySummary: '',
         whyResponses: [],
         areaHeads: [],
         rootCauses: [],
         actionProposals: [],
         selectedSilo: null,
+        ruptureCommitment: null,
       },
       currentPhase: 'WHY',
     });
@@ -24,12 +37,14 @@ export const DevControlPanel: React.FC = () => {
   const handleWipeEmergency = () => {
     updateState({
       context: {
+        ritualId: state.context.ritualId,
         whySummary: '',
         whyResponses: [],
         areaHeads: [],
         rootCauses: [],
         actionProposals: [],
         selectedSilo: null,
+        ruptureCommitment: null,
       },
       currentPhase: 'WHY',
     });
@@ -227,6 +242,55 @@ export const DevControlPanel: React.FC = () => {
             </div>
 
             <div className="space-y-3">
+              <div 
+                className="border border-emerald-500/30 bg-emerald-900/20 rounded-lg p-3 space-y-2"
+              >
+                <div className="flex items-center gap-2">
+                  <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                  <span className="text-emerald-400 uppercase tracking-wider text-[10px] font-bold">
+                    Sesión Segura: {ritualId}
+                  </span>
+                </div>
+                <p className="text-[9px] text-stone-400">
+                  {tenantConfig.institutionName}
+                </p>
+              </div>
+
+              <div className="space-y-2">
+                <p className="text-stone-600 uppercase tracking-wider text-[10px]">Cambiar de Sala</p>
+                <input
+                  type="text"
+                  value={roomInput}
+                  onChange={(e) => setRoomInput(e.target.value)}
+                  placeholder={ritualId}
+                  className="w-full px-2 py-1.5 bg-stone-800 border border-stone-700 rounded text-[10px] text-stone-200 placeholder:text-stone-500 uppercase focus:outline-none focus:border-sasquach-gold/50"
+                  onKeyDown={(e) => e.key === 'Enter' && handleChangeRoom()}
+                />
+                <button
+                  onClick={handleChangeRoom}
+                  className="w-full px-2 py-1.5 bg-sasquach-gold/20 text-sasquach-gold border border-sasquach-gold/30 rounded hover:bg-sasquach-gold/30 transition-all text-[10px] uppercase tracking-wider font-bold"
+                >
+                  Cambiar Hospital
+                </button>
+                <div className="flex flex-wrap gap-1 pt-1">
+                  {['LOBBY', 'URGENCIAS', 'LAB', 'UCI'].map((room) => (
+                    <button
+                      key={room}
+                      onClick={() => handleQuickRoomChange(room)}
+                      className={`px-1.5 py-0.5 rounded text-[8px] uppercase tracking-wider transition-all ${
+                        ritualId === room
+                          ? 'bg-emerald-600/30 text-emerald-400'
+                          : 'bg-stone-800 text-stone-400 hover:bg-stone-700'
+                      }`}
+                    >
+                      {room}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="h-px bg-stone-700 my-2" />
+
               <div className="flex items-center justify-between">
                 <span className="text-stone-500 uppercase tracking-wider">Phase:</span>
                 <span className="text-emerald-400 font-bold">{state.currentPhase}</span>

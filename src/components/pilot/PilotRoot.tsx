@@ -8,7 +8,7 @@ import { PilotView } from './PilotView';
  * and renders the appropriate view based on the current phase.
  */
 export const PilotRoot = () => {
-  const { state, nextPhase, role } = useRitual();
+  const { state, nextPhase, role, tenantConfig } = useRitual();
 
   return (
     <div className="min-h-screen bg-stone-950 flex flex-col font-sans selection:bg-sasquach-gold/30 selection:text-stone-950">
@@ -16,8 +16,8 @@ export const PilotRoot = () => {
       <header className="p-6 border-b border-stone-900 flex justify-between items-center bg-stone-950/80 backdrop-blur-xl sticky top-0 z-30">
         <div className="flex flex-col">
           <div className="flex items-center gap-2 mb-1">
-             <div className="w-1.5 h-1.5 rounded-full bg-sasquach-gold shadow-[0_0_8px_#c3a343]" />
-             <h2 className="text-sasquach-gold/60 text-[9px] font-black tracking-[0.4em] uppercase">Pilot Control • {role}</h2>
+              <div className="w-1.5 h-1.5 rounded-full bg-sasquach-gold shadow-[0_0_8px_#c3a343]" />
+              <h2 className="text-sasquach-gold/60 text-[9px] font-black tracking-[0.4em] uppercase">Pilot Control • {role}</h2>
           </div>
           <h1 className="text-lg font-serif italic text-stone-200">
             Phase: <span className="font-sans font-bold uppercase tracking-normal not-italic text-stone-100">{state.currentPhase}</span>
@@ -58,7 +58,7 @@ export const PilotRoot = () => {
       </main>
 
       <footer className="p-6 border-t border-stone-900 bg-black/40 text-[9px] text-stone-700 text-center uppercase tracking-[0.5em] font-medium">
-        Sasquach Ritual Engine • Node {state.roomId}
+        {tenantConfig.institutionName} • Ritual {state.context.ritualId}
       </footer>
     </div>
   );
