@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { createClient, SupabaseClient } from '@supabase/supabase-js';
+import { createClient } from '@supabase/supabase-js';
 import { RoomState, RitualPhase, ParticipantRole, RefortifySiloPayload, AreaHead } from '../types';
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
@@ -112,11 +112,19 @@ const initialState: RoomState = {
   frictionMap: [],
 };
 
-let supabase: SupabaseClient | null = null;
+console.log(`[SUPABASE_SYNC] Initializing... URL: ${SUPABASE_URL ? 'present' : 'MISSING'}, KEY: ${SUPABASE_KEY ? 'present' : 'MISSING'}`);
+
+let supabase: ReturnType<typeof createClient> | null = null;
 
 if (SUPABASE_URL && SUPABASE_KEY) {
-  supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
-  console.log(`[SUPABASE_SYNC] Client created for ${SUPABASE_URL}`);
+  try {
+    supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
+    console.log(`[SUPABASE_SYNC] Client created for ${SUPABASE_URL}`);
+  } catch (e) {
+    console.error(`[SUPABASE_SYNC] Failed to create client:`, e);
+  }
+} else {
+  console.error(`[SUPABASE_SYNC] Missing config - URL: ${!!SUPABASE_URL}, KEY: ${!!SUPABASE_KEY}`);
 }
 
 export const useSasquachSync = (role: ParticipantRole) => {
@@ -156,9 +164,12 @@ export const useSasquachSync = (role: ParticipantRole) => {
   }, [state]);
   
   useEffect(() => {
-    if (!supabase || !currentRitualId) return;
+    if (!supabase || !currentRitualId) {
+      console.warn(`[SUPABASE_SYNC] Skipping subscription - no supabase client or no ritualId`);
+      return;
+    }
     
-    console.log(`[SUPABASE_SYNC] Subscribing to INSERT on actions table for ritual: ${currentRitualId}`);
+    console.log(`[SUPABASE_SYNC] Setting up subscription for ritual: ${currentRitualId}`);
     
     const channel = supabase.channel(`ritual-${currentRitualId}`)
       .on('postgres_changes', {
@@ -166,7 +177,8 @@ export const useSasquachSync = (role: ParticipantRole) => {
         schema: 'public',
         table: 'actions',
         filter: `ritual_id=eq.${currentRitualId}`,
-      }, (payload) => {
+      }, (payload: any) => {
+        console.log(`[SUPABASE_SYNC] 📥 Raw payload:`, payload);
         const newAction = payload.new;
         console.log(`[SUPABASE_SYNC] 📥 INSERT received:`, newAction);
         
@@ -289,7 +301,9 @@ export const useSasquachSync = (role: ParticipantRole) => {
         console.log(`[UPDATE_DATA] Inserting to Supabase:`, lastProposal.text?.slice(0, 30));
         
         if (supabase && lastProposal.text) {
-          const { data, error } = await supabase.from('actions').insert({
+          console.log(`[UPDATE_DATA] Attempting Supabase insert...`);
+          
+          const insertData = {
             id: lastProposal.id,
             ritual_id: currentRitualId,
             session_id: sessionId,
@@ -298,7 +312,10 @@ export const useSasquachSync = (role: ParticipantRole) => {
             text: lastProposal.text,
             timestamp: lastProposal.timestamp,
             weight: lastProposal.weight || 0.5,
-          });
+          };
+          console.log(`[UPDATE_DATA] Insert data:`, insertData);
+          
+          const { data, error } = await (supabase.from('actions') as any).insert(insertData);
           
           if (error) {
             console.error(`[UPDATE_DATA] Supabase insert error:`, error);
