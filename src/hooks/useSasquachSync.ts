@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { createClient } from '@supabase/supabase-js';
-import { RoomState, RitualPhase, ParticipantRole, RefortifySiloPayload, AreaHead } from '../types';
+import { RoomState, RitualPhase, ParticipantRole, RefortifySiloPayload, AreaHead, RitualEvent } from '../types';
+import { BroadcastTransport } from '../sync/BroadcastTransport';
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 const SUPABASE_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
@@ -114,17 +115,21 @@ const initialState: RoomState = {
 
 console.log(`[SUPABASE_SYNC] Initializing... URL: ${SUPABASE_URL ? 'present' : 'MISSING'}, KEY: ${SUPABASE_KEY ? 'present' : 'MISSING'}`);
 
+const channelName = `sasquach_ritual_${ritualIdGlobal}`;
+const broadcastChannel = new BroadcastTransport(channelName);
+console.log(`[SYNC] BroadcastChannel created: ${channelName}`);
+
 let supabase: ReturnType<typeof createClient> | null = null;
 
 if (SUPABASE_URL && SUPABASE_KEY) {
   try {
     supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
-    console.log(`[SUPABASE_SYNC] Client created for ${SUPABASE_URL}`);
+    console.log(`[SUPABASE_SYNC] Supabase client created for ${SUPABASE_URL}`);
   } catch (e) {
     console.error(`[SUPABASE_SYNC] Failed to create client:`, e);
   }
 } else {
-  console.error(`[SUPABASE_SYNC] Missing config - URL: ${!!SUPABASE_URL}, KEY: ${!!SUPABASE_KEY}`);
+  console.error(`[SUPABASE_SYNC] Missing config - falling back to BroadcastChannel`);
 }
 
 export const useSasquachSync = (role: ParticipantRole) => {
@@ -158,18 +163,61 @@ export const useSasquachSync = (role: ParticipantRole) => {
   const stateRef = useRef<RoomState>(state);
   const actionProposalsRef = useRef<any[]>([]);
   
-  useEffect(() => {
+useEffect(() => {
     stateRef.current = state;
     actionProposalsRef.current = state.context.actionProposals;
   }, [state]);
-  
+
+  useEffect(() => {
+    console.log(`[SYNC] Setting up BroadcastChannel subscription for ritual: ${currentRitualId}`);
+    
+    const broadcastUnsubscribe = broadcastChannel.subscribe((event: RitualEvent) => {
+      if (event.type === 'DATA_UPDATE') {
+        const payload = event.payload as any;
+        if (payload.context?.actionProposals) {
+          const newProposals = payload.context.actionProposals;
+          console.log(`[SYNC] BroadcastChannel received ${newProposals.length} proposals`);
+          
+          setState((prev) => {
+            const merged = [...prev.context.actionProposals];
+            newProposals.forEach((newP: any) => {
+              const exists = merged.some(
+                p => p.id === newP.id || (p.sessionId === newP.sessionId && p.text === newP.text)
+              );
+              if (!exists) {
+                merged.push(newP);
+              }
+            });
+            return {
+              ...prev,
+              context: { ...prev.context, actionProposals: merged },
+            };
+          });
+        }
+      }
+      if (event.type === 'MISSION_COMPLETE') {
+        const payload = event.payload as any;
+        console.log(`[SYNC] MISSION_COMPLETE via BroadcastChannel`);
+        setState((prev) => ({
+          ...prev,
+          context: { ...prev.context, ruptureCommitment: payload.actionText },
+        }));
+      }
+    });
+    
+    return () => {
+      console.log(`[SYNC] Cleaning up BroadcastChannel subscription`);
+      broadcastUnsubscribe();
+    };
+  }, [currentRitualId]);
+
   useEffect(() => {
     if (!supabase || !currentRitualId) {
-      console.warn(`[SUPABASE_SYNC] Skipping subscription - no supabase client or no ritualId`);
+      console.warn(`[SUPABASE_SYNC] Skipping Supabase subscription - no client or no ritualId, using BroadcastChannel only`);
       return;
     }
     
-    console.log(`[SUPABASE_SYNC] Setting up subscription for ritual: ${currentRitualId}`);
+    console.log(`[SUPABASE_SYNC] Setting up Supabase subscription for ritual: ${currentRitualId}`);
     
     const channel = supabase.channel(`ritual-${currentRitualId}`)
       .on('postgres_changes', {
@@ -185,7 +233,7 @@ export const useSasquachSync = (role: ParticipantRole) => {
         const incomingProposals = actionProposalsRef.current || [];
         
         const exists = incomingProposals.some(
-          p => p.id === newAction.id || (p.sessionId === newAction.sessionId && p.text === newAction.text)
+          p => p.id === newAction.id || (p.sessionId === newAction.session_id && p.text === newAction.text)
         );
         
         if (!exists) {
@@ -216,10 +264,13 @@ export const useSasquachSync = (role: ParticipantRole) => {
       })
       .subscribe((status) => {
         console.log(`[SUPABASE_SYNC] Subscription status: ${status}`);
+        if (status === 'CHANNEL_ERROR') {
+          console.warn(`[SUPABASE_SYNC] Supabase failed, relying on BroadcastChannel fallback`);
+        }
       });
     
     return () => {
-      console.log(`[SUPABASE_SYNC] Cleaning up subscription`);
+      console.log(`[SUPABASE_SYNC] Cleaning up Supabase subscription`);
       supabase?.removeChannel(channel);
     };
   }, [currentRitualId]);
@@ -298,13 +349,21 @@ export const useSasquachSync = (role: ParticipantRole) => {
       if (proposals.length > 0) {
         const lastProposal = proposals[proposals.length - 1];
         
-        console.log(`[UPDATE_DATA] Inserting to Supabase:`, lastProposal.text?.slice(0, 30));
+        console.log(`[UPDATE_DATA] Broadcasting via BroadcastChannel:`, lastProposal.text?.slice(0, 30));
+        
+        broadcastChannel.publish({
+          type: 'DATA_UPDATE',
+          payload: newData,
+          sender: role,
+          timestamp: Date.now(),
+          sessionId,
+        } as any);
+        console.log(`[UPDATE_DATA] BroadcastChannel publish done`);
         
         if (supabase && lastProposal.text) {
           console.log(`[UPDATE_DATA] Attempting Supabase insert...`);
           
           const insertData = {
-            id: lastProposal.id,
             ritual_id: currentRitualId,
             session_id: sessionId,
             role: role,
@@ -313,14 +372,16 @@ export const useSasquachSync = (role: ParticipantRole) => {
             timestamp: lastProposal.timestamp,
             weight: lastProposal.weight || 0.5,
           };
-          console.log(`[UPDATE_DATA] Insert data:`, insertData);
           
-          const { data, error } = await (supabase.from('actions') as any).insert(insertData);
-          
-          if (error) {
-            console.error(`[UPDATE_DATA] Supabase insert error:`, error);
-          } else {
-            console.log(`[UPDATE_DATA] Supabase insert success:`, data);
+          try {
+            const { data, error } = await (supabase.from('actions') as any).insert(insertData);
+            if (error) {
+              console.warn(`[UPDATE_DATA] Supabase insert failed (fallback working):`, error);
+            } else {
+              console.log(`[UPDATE_DATA] Supabase insert success:`, data);
+            }
+          } catch (e) {
+            console.warn(`[UPDATE_DATA] Supabase insert exception:`, e);
           }
         }
       }
