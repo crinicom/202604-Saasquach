@@ -1,6 +1,8 @@
+'use client';
+
 import React from 'react';
 import { motion } from 'framer-motion';
-import { RitualPhase } from '../../types';
+import { RitualPhase } from '../../lib/types';
 
 interface SasquachAvatarProps {
   phase?: RitualPhase;

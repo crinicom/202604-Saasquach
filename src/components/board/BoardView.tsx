@@ -1,10 +1,14 @@
+'use client';
+
 import React, { useEffect, useState, useMemo, useRef } from 'react';
 import { motion, AnimatePresence, Variants } from 'framer-motion';
 import { ChevronUp, ChevronDown, Target, GitMerge, Eye, EyeOff, MapPin, AlertTriangle } from 'lucide-react';
-import { useRitual } from '../../hooks/useRitual';
-import { useConvergence } from '../../hooks/useConvergence';
+import { useRitual } from '@/lib/hooks/useRitual';
+import { useConvergence } from '@/lib/hooks/useConvergence';
 import { SasquachAvatar } from '../sasquach/SasquachAvatar';
-import { RitualPhase, AreaHead, WhyEntry, SimilarNodes, ActionProposal } from '../../types';
+import { RitualPhase, AreaHead, WhyEntry, SimilarNodes, ActionProposal, RootCause, VerifiableFact } from '@/lib/types';
+import { MermaidDiagram } from './MermaidDiagram';
+import { SasquachBrain } from '@/lib/logic/brain/brainLogic';
 
 const transitionOverlayVariants: Variants = {
   hidden: { opacity: 0 },
@@ -1026,6 +1030,98 @@ const seededRandom = (seed: number) => {
   return x - Math.floor(x);
 };
 
+interface RootCauseOrbProps {
+  cause: RootCause;
+  index: number;
+  facts: VerifiableFact[];
+  position: { x: number; y: number };
+  vmin: number;
+}
+
+const RootCauseOrb: React.FC<RootCauseOrbProps> = ({ cause, index, facts, position, vmin }) => {
+  const size = Math.max(120, vmin * 0.18);
+  const isValidated = cause.status === 'validated';
+  
+  // Distinct roles contributing facts
+  const roles = Array.from(new Set(facts.map(f => f.role)));
+  
+  return (
+    <motion.div
+      initial={{ scale: 0, opacity: 0 }}
+      animate={{ scale: 1, opacity: 1 }}
+      className="absolute pointer-events-none"
+      style={{
+        left: position.x,
+        top: position.y,
+        minWidth: `${size}px`,
+        maxWidth: `${size}px`,
+        transform: 'translate(-50%, -50%)',
+        zIndex: 100 + index,
+      }}
+    >
+      <div 
+        className={`w-full aspect-square rounded-[2.5rem] flex flex-col items-center justify-center p-6 text-center transition-all duration-1000 ${
+          isValidated ? 'bg-sasquach-gold/10 border-sasquach-gold/50 shadow-[0_0_50px_rgba(195,163,67,0.3)]' : 'bg-indigo-950/20 border-indigo-500/20'
+        } border-2 backdrop-blur-xl relative overflow-hidden`}
+      >
+        <div className="absolute inset-0 bg-gradient-to-b from-white/5 to-transparent pointer-events-none" />
+        
+        <p className="text-[8px] font-black uppercase tracking-[0.3em] text-indigo-400 mb-3 block">
+          {isValidated ? 'Causa Validada' : 'Candidato Oráculo'}
+        </p>
+        
+        <h3 className="text-stone-100 font-serif italic text-sm leading-relaxed mb-4">
+          "{cause.label}"
+        </h3>
+
+        {/* Fact Pips */}
+        <div className="flex gap-1.5 mt-auto">
+          {facts.slice(0, 5).map((fact, i) => (
+            <motion.div
+              key={fact.id}
+              initial={{ scale: 0 }}
+              animate={{ scale: 1 }}
+              className={`w-2.5 h-2.5 rounded-full border ${
+                isValidated ? 'bg-sasquach-gold border-white/20' : 'bg-indigo-500 border-white/10'
+              } shadow-lg`}
+            />
+          ))}
+          {facts.length > 5 && (
+            <span className="text-[10px] text-stone-500 font-bold ml-1">+{facts.length - 5}</span>
+          )}
+          {facts.length === 0 && (
+             <div className="w-16 h-1 bg-stone-800 rounded-full overflow-hidden">
+                <motion.div 
+                  className="h-full bg-indigo-500/30"
+                  animate={{ x: [-64, 64] }}
+                  transition={{ duration: 2, repeat: Infinity, ease: "linear" }}
+                />
+             </div>
+          )}
+        </div>
+
+        {/* Roles contributing */}
+        <div className="flex gap-1 mt-3">
+          {roles.map(role => (
+            <div key={role} className="px-2 py-0.5 rounded-full bg-white/5 border border-white/10 text-[6px] font-black uppercase tracking-tighter text-stone-400">
+               {role}
+            </div>
+          ))}
+        </div>
+      </div>
+      
+      {/* Visual pulse for validation gate */}
+      {!isValidated && roles.length >= 2 && (
+         <motion.div 
+           className="absolute -inset-2 rounded-[3rem] border border-emerald-500/40"
+           animate={{ scale: [1, 1.05, 1], opacity: [0.2, 0.4, 0.2] }}
+           transition={{ duration: 2, repeat: Infinity }}
+         />
+      )}
+    </motion.div>
+  );
+};
+
 interface SiloOrbitRingProps {
   areaHeads: AreaHead[];
   previousAreaHeads: AreaHead[];
@@ -1251,17 +1347,65 @@ export const BoardView: React.FC = () => {
       setIsTransitioning(false);
       setSelectedSilo(null);
       setFusionProposal(null);
+      
+      // El Board orquesta la generación de candidatos (IA Real)
+      if (isBoard && state.context.rootCauses.length === 0) {
+        console.log(`[ORÁCULO] Invocando Capa Duende para análisis clínico...`);
+        
+        SasquachBrain.callDuende('CONVERGENCE', state).then(data => {
+          if (data && data.rootCauses) {
+            updateState({
+              context: {
+                ...state.context,
+                rootCauses: data.rootCauses.map((c: any) => ({
+                  ...c,
+                  status: 'candidate',
+                  votes: 0
+                }))
+              }
+            });
+          } else {
+            // Fallback determinista si la IA falla o no hay API Key
+            const candidates = SasquachBrain.generateRootCauseCandidates(state);
+            updateState({
+              context: {
+                 ...state.context,
+                 rootCauses: candidates
+              }
+            });
+          }
+        });
+      }
     }
-    if (state.currentPhase === 'WHY') {
+    if (state.currentPhase === 'WHY' && currentPhase !== 'WHY') {
       setCurrentPhase('WHY');
       setIsTransitioning(false);
       setSelectedSilo(null);
       setShowPurposeSlot(false);
     }
-    if (state.currentPhase === 'ACTION') {
+    if (state.currentPhase === 'ACTION' && currentPhase !== 'ACTION') {
       setCurrentPhase('ACTION');
     }
-  }, [state.currentPhase]);
+    if (state.currentPhase === 'DESIGN' && currentPhase !== 'DESIGN') {
+      setCurrentPhase('DESIGN');
+      setIsTransitioning(false);
+      
+      // El Board orquesta la generación del diagrama (IA Real)
+      if (isBoard && !state.mermaidCode) {
+        console.log(`[ORÁCULO] Solicitando Estructura de Diseño (Mermaid)...`);
+        
+        SasquachBrain.callDuende('DESIGN', state).then(data => {
+          if (data && data.mermaid) {
+            updateState({ mermaidCode: data.mermaid });
+          } else {
+            // Fallback determinista
+            const proposal = SasquachBrain.generateMermaidProposal(state);
+            updateState({ mermaidCode: proposal });
+          }
+        });
+      }
+    }
+  }, [state.currentPhase, state.mermaidCode, isBoard, updateState, currentPhase]);
 
   useEffect(() => {
     if ((currentPhase === 'INQUIRY' || currentPhase === 'CONVERGENCE') && areaHeads.length > previousAreaHeadsRef.current.length) {
@@ -1278,7 +1422,7 @@ export const BoardView: React.FC = () => {
   }, [similarPairs, state.currentPhase, fusionProposal]);
 
   useEffect(() => {
-    if (isBoard) {
+    if (isBoard && state.context.selectedSilo !== (selectedSilo?.role || null)) {
       updateState({
         context: {
           ...state.context,
@@ -1286,7 +1430,7 @@ export const BoardView: React.FC = () => {
         },
       });
     }
-  }, [selectedSilo, isBoard, state.context, updateState]);
+  }, [selectedSilo, isBoard, state.context.selectedSilo, updateState]);
 
   const orbPositions = useMemo(() => {
     const sortedResponses = [...whyResponses].sort((a, b) => b.weight - a.weight);
@@ -1315,6 +1459,7 @@ export const BoardView: React.FC = () => {
 
   const isInquiryPhase = currentPhase === 'INQUIRY';
   const isConvergencePhase = currentPhase === 'CONVERGENCE';
+  const isDesignPhase = currentPhase === 'DESIGN';
   const activeOrbs = whyResponses.filter(r => r.status !== 'discarded');
   const discardedNodes = getDiscardedNodes();
   const sortedOrbs = [...activeOrbs].sort((a, b) => b.weight - a.weight);
@@ -1364,6 +1509,49 @@ export const BoardView: React.FC = () => {
     <div className="relative w-screen h-screen overflow-hidden bg-transparent">
       <div className="absolute inset-0 pointer-events-none z-0">
         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[80vmin] h-[80vmin] bg-emerald-900/20 rounded-full blur-[15vmin]" />
+      </div>
+
+      {/* Global Validation Progress Indicator (Top Right) */}
+      <div className="absolute top-12 right-64 z-40 pointer-events-none">
+        <AnimatePresence>
+          {(isConvergencePhase || isDesignPhase) && (
+            <motion.div
+              initial={{ opacity: 0, x: 20 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: 20 }}
+              className="flex items-center gap-6"
+            >
+              <div className="text-right">
+                <p className="text-[9px] font-black text-stone-500 uppercase tracking-[0.4em] mb-1">Estatus de Rigor Clínico</p>
+                <div className="flex items-center gap-3">
+                  <div className="flex gap-1">
+                    {state.context.rootCauses.map((cause, i) => (
+                      <div 
+                        key={cause.id}
+                        className={`w-4 h-1 rounded-full transition-all duration-500 ${
+                          cause.status === 'validated' ? 'bg-sasquach-gold shadow-[0_0_8px_#c3a343]' : 'bg-stone-800'
+                        }`}
+                      />
+                    ))}
+                  </div>
+                  <span className="text-stone-300 font-mono text-sm">
+                    {state.context.rootCauses.filter(c => c.status === 'validated').length}/{state.context.rootCauses.length}
+                  </span>
+                </div>
+              </div>
+              
+              <div className={`w-12 h-12 rounded-full flex items-center justify-center border-2 transition-all duration-700 ${
+                isValidationGateCleared() ? 'border-sasquach-gold bg-sasquach-gold/10' : 'border-stone-800 bg-stone-900/40'
+              }`}>
+                {isValidationGateCleared() ? (
+                  <CheckCircle2 size={24} className="text-sasquach-gold shadow-glow" />
+                ) : (
+                  <AlertTriangle size={24} className="text-stone-700" />
+                )}
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
 
       <AnimatePresence>
@@ -1467,6 +1655,7 @@ export const BoardView: React.FC = () => {
         <AnimatePresence mode="wait">
           {currentPhase === 'WHY' && (
             <div className="absolute inset-0 z-20 pl-64 w-full h-full">
+              {isBoard && console.log(`[BOARD_VIEW] Rendering WHY phase with ${sortedOrbs.length} orbs`)}
               <AnimatePresence mode="popLayout">
                 {sortedOrbs.map((entry, displayIdx) => {
                   const origIdx = whyResponses.findIndex(r => r.timestamp === entry.timestamp);
@@ -1504,6 +1693,56 @@ export const BoardView: React.FC = () => {
               isFocused={currentPhase === 'ACTION' && selectedSilo !== null}
               isDisintegrating={siloDisintegrating}
             />
+          )}
+
+          {isConvergencePhase && (
+            <div className="absolute inset-0 z-10 pl-64 pointer-events-none">
+              {state.context.rootCauses.map((cause, idx) => {
+                const count = state.context.rootCauses.length;
+                const vmin = Math.min(window.innerWidth, window.innerHeight);
+                const angle = (idx / Math.max(1, count)) * Math.PI * 2 - Math.PI / 2;
+                const radius = vmin * 0.15;
+                const x = (window.innerWidth - 256) / 2 + Math.cos(angle) * radius + 256;
+                const y = window.innerHeight / 2 + Math.sin(angle) * radius;
+                
+                const causeFacts = state.context.verifiableFacts.filter(f => f.rootCauseId === cause.id);
+                
+                return (
+                  <RootCauseOrb
+                    key={cause.id}
+                    cause={cause}
+                    index={idx}
+                    facts={causeFacts}
+                    position={{ x, y }}
+                    vmin={vmin}
+                  />
+                );
+              })}
+            </div>
+          )}
+          
+          {isDesignPhase && (
+            <motion.div
+              key="mermaid-area"
+              initial={{ opacity: 0, scale: 0.9, filter: 'blur(10px)' }}
+              animate={{ opacity: 1, scale: 1, filter: 'blur(0px)' }}
+              exit={{ opacity: 0, scale: 1.1, filter: 'blur(20px)' }}
+              transition={{ duration: 1, ease: [0.16, 1, 0.3, 1] }}
+              className="absolute inset-0 z-10 pl-64 flex items-center justify-center p-20"
+            >
+              <div className="w-full h-full glass-panel bg-stone-900/40 rounded-[3rem] border border-sasquach-gold/10 p-12 relative overflow-hidden">
+                <div className="absolute top-8 left-12 flex items-center gap-4">
+                   <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                   <h3 className="text-emerald-500/60 text-[10px] uppercase tracking-[0.4em] font-black">Plan de Ejecución Interactiva</h3>
+                </div>
+                
+                <MermaidDiagram 
+                  code={state.mermaidCode}
+                  frictionMap={state.frictionMap}
+                  className="mt-8"
+                />
+              </div>
+            </motion.div>
           )}
         </AnimatePresence>
 
@@ -1625,6 +1864,40 @@ export const BoardView: React.FC = () => {
             vmin={Math.min(window.innerWidth, window.innerHeight)}
           />
         )}
+
+        {/* Global Validation Status - Convergence Phase */}
+        <AnimatePresence>
+          {isConvergencePhase && (
+            <motion.div
+              initial={{ opacity: 0, y: 50 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 50 }}
+              className="absolute bottom-12 left-1/2 -translate-x-1/2 z-50 pointer-events-none"
+            >
+              <div className="glass-panel bg-stone-950/80 border border-indigo-500/20 px-12 py-6 rounded-3xl flex flex-col items-center gap-2">
+                <span className="text-[10px] font-black uppercase tracking-[0.5em] text-indigo-400/80">
+                  Estado de Rigor Clínico
+                </span>
+                <div className="flex items-center gap-6">
+                  <div className="flex gap-2">
+                    {state.context.rootCauses.map(c => {
+                      const facts = state.context.verifiableFacts.filter(f => f.rootCauseId === c.id);
+                      const roles = new Set(facts.map(f => f.role)).size;
+                      return (
+                        <div key={c.id} className={`w-8 h-1 rounded-full ${
+                          c.status === 'validated' ? 'bg-emerald-500' : roles > 0 ? 'bg-indigo-500' : 'bg-stone-800'
+                        }`} />
+                      );
+                    })}
+                  </div>
+                  <span className="text-xl font-serif italic text-stone-100">
+                    {state.context.rootCauses.filter(c => c.status === 'validated').length} / {state.context.rootCauses.length} Validadas
+                  </span>
+                </div>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
 
         <div className={`absolute z-50 ${currentPhase === 'ACTION' && selectedSilo ? 'bottom-12 left-1/2 -translate-x-1/2 pl-64' : 'bottom-12 right-12'}`}>
           <SasquachAvatar

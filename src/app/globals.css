@@ -1,0 +1,73 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&family=Playfair+Display:ital,wght@0,400..900;1,400..900&display=swap');
+@import "tailwindcss";
+
+@theme {
+  /* Cinematic Color Tokens */
+  --color-emerald-deep: #064e3b;
+  --color-forest-void: #020617;
+  --color-sasquach-gold: #c3a343;
+  --color-sasquach-red: #8b0000;
+  --color-forest-800: #1c1917;
+  --color-forest-700: #292524;
+  --color-forest-gradient: var(--color-forest-void);
+  
+  /* Dynamic Theme Variables (set by useTheme hook) */
+  --color-theme-primary: var(--theme-primary, #059669);
+  --color-theme-secondary: var(--theme-secondary, #c3a343);
+  --color-theme-glow: var(--theme-glow, rgba(6, 78, 59, 0.3));
+
+  /* Typography Scale: Augmented Fourth (1.414) */
+  --font-serif: "Playfair Display", serif;
+  --font-sans: "Inter", sans-serif;
+
+  --text-xs: 0.707rem;
+  --text-sm: 0.841rem;
+  --text-base: 1rem;
+  --text-lg: 1.414rem;
+  --text-xl: 1.999rem;
+  --text-2xl: 2.827rem;
+  --text-3xl: 3.998rem;
+  --text-4xl: 5.653rem;
+}
+
+@layer base {
+  body {
+    @apply bg-forest-void text-stone-200 selection:bg-sasquach-gold/30 font-sans;
+  }
+  
+  h1, h2, h3, h4, h5, h6 {
+    @apply font-serif tracking-tight leading-tight uppercase font-black italic;
+  }
+}
+
+@keyframes depth-pulse {
+  0%, 100% { opacity: 0.6; transform: scale(1); }
+  50% { opacity: 0.9; transform: scale(1.1); }
+}
+
+/* Cinematic Forest Gradient */
+.bg-forest-gradient {
+  position: relative;
+  background-color: var(--color-forest-void);
+  overflow: hidden;
+}
+
+.bg-forest-gradient::before {
+  content: '';
+  position: absolute;
+  inset: -20%;
+  background: radial-gradient(circle at center, var(--color-emerald-deep) 0%, transparent 80%);
+  animation: depth-pulse 12s ease-in-out infinite;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.bg-forest-gradient > * {
+  position: relative;
+  z-index: 1;
+}
+
+/* Glass panel effect */
+.glass-panel {
+  @apply backdrop-blur-xl bg-white/5 border border-white/10 shadow-2xl;
+}

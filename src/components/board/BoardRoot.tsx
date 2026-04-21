@@ -1,7 +1,11 @@
-import { useRitual } from '../../hooks/useRitual';
-import { useTheme } from '../../hooks/useTheme';
+'use client';
+
+import { useRitual } from '@/lib/context/RitualContext';
+import { useTheme } from '@/lib/hooks/useTheme';
 import { BoardView } from './BoardView';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
+import { SasquachBrain } from '@/lib/logic/brain/brainLogic';
+import { AlertCircle } from 'lucide-react';
 
 /**
  * BoardRoot: The Mirror Narrative Orchestrator
@@ -11,6 +15,9 @@ import { motion } from 'framer-motion';
 export const BoardRoot = () => {
   const { state, tenantConfig } = useRitual();
   const { cssVariables } = useTheme();
+
+  const missingSilos = SasquachBrain.detectSilos(state);
+  const showSiloWarning = state.currentPhase === 'INQUIRY' || state.currentPhase === 'CONVERGENCE';
 
   return (
     <div 
@@ -51,7 +58,29 @@ export const BoardRoot = () => {
         </main>
 
         <footer className="p-12 relative z-30 flex justify-between items-end pointer-events-none">
-          <div className="max-w-xs space-y-4 pointer-events-auto">
+          <div className="max-w-sm space-y-4 pointer-events-auto">
+            <AnimatePresence>
+              {showSiloWarning && missingSilos.length > 0 && (
+                <motion.div 
+                  initial={{ opacity: 0, x: -20 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  exit={{ opacity: 0, x: -20 }}
+                  className="mb-4 p-6 glass-panel rounded-3xl border border-red-500/30 bg-red-950/20 backdrop-blur-xl"
+                >
+                  <div className="flex items-start gap-4">
+                    <AlertCircle className="text-red-500 shrink-0 mt-0.5" size={18} />
+                    <div className="space-y-1">
+                       <h4 className="text-[10px] font-black uppercase tracking-widest text-red-500">Detector de Silos</h4>
+                       <p className="text-stone-300 text-xs italic leading-relaxed">
+                          Faltan voces críticas de: <span className="text-stone-100 font-bold not-italic">{missingSilos.join(', ')}</span>. 
+                          ¿Quién controla el recurso bloqueante?
+                       </p>
+                    </div>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+
             <div className="p-8 glass-panel rounded-[2rem] border border-sasquach-gold/10 bg-stone-900/80 backdrop-blur-2xl shadow-2xl">
                <div className="flex items-center gap-2 mb-4">
                   <div className="w-1 h-1 rounded-full bg-sasquach-gold/50" />

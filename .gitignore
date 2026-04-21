@@ -1,7 +1,7 @@
 # local env files
 .env.local
 .env.*.local
-
+gen-lang-client-0585123825-ce150e9d867f.json
 # log
 npm-debug.log*
 yarn-debug.log*
