@@ -1,7 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { createClient } from '@supabase/supabase-js';
-import { RoomState, RitualPhase, ParticipantRole, RefortifySiloPayload, AreaHead, RitualEvent } from '../types';
-import { BroadcastTransport } from '../sync/BroadcastTransport';
+import { createClient, SupabaseClient } from '@supabase/supabase-js';
+import { RoomState, RitualPhase, ParticipantRole, RefortifySiloPayload, AreaHead, RitualEvent, RitualEventType, WhyEntry } from '../types';
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 const SUPABASE_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
@@ -93,7 +92,7 @@ const calculateSimilarity = (a: string, b: string): number => {
 
 const ritualIdGlobal = getRitualIdFromUrl();
 
-console.log(`[SUPABASE_SYNC] Initialized with ritualId: "${ritualIdGlobal}"`);
+console.log(`[SYNC] Initialized with ritualId: "${ritualIdGlobal}"`);
 
 const initialState: RoomState = {
   roomId: ritualIdGlobal,
@@ -113,24 +112,71 @@ const initialState: RoomState = {
   frictionMap: [],
 };
 
-console.log(`[SUPABASE_SYNC] Initializing... URL: ${SUPABASE_URL ? 'present' : 'MISSING'}, KEY: ${SUPABASE_KEY ? 'present' : 'MISSING'}`);
-
-const channelName = `sasquach_ritual_${ritualIdGlobal}`;
-const broadcastChannel = new BroadcastTransport(channelName);
-console.log(`[SYNC] BroadcastChannel created: ${channelName}`);
-
-let supabase: ReturnType<typeof createClient> | null = null;
+let supabase: SupabaseClient | null = null;
 
 if (SUPABASE_URL && SUPABASE_KEY) {
   try {
     supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
-    console.log(`[SUPABASE_SYNC] Supabase client created for ${SUPABASE_URL}`);
+    console.log(`[SYNC] Supabase client created for ${SUPABASE_URL}`);
   } catch (e) {
-    console.error(`[SUPABASE_SYNC] Failed to create client:`, e);
+    console.error(`[SYNC] Failed to create client:`, e);
   }
 } else {
-  console.error(`[SUPABASE_SYNC] Missing config - falling back to BroadcastChannel`);
+  console.warn(`[SYNC] Missing config - realtime sync disabled`);
 }
+
+interface SyncChannel {
+  publish(event: RitualEvent): Promise<void>;
+  subscribe(handler: (event: RitualEvent) => void): () => void;
+  close(): void;
+}
+
+const createSupabaseBroadcastChannel = (ritualId: string): SyncChannel | null => {
+  if (!supabase) return null;
+  
+  const channelName = `sasquach-${ritualId.toLowerCase()}`;
+  const channel = supabase.channel(channelName);
+  
+  const handlers: Set<(event: RitualEvent) => void> = new Set();
+  
+  channel.on('broadcast', { event: 'ritual-update' }, (payload: { payload: RitualEvent }) => {
+    console.log(`[SYNC] Broadcast received:`, payload.payload?.type);
+    handlers.forEach(handler => handler(payload.payload));
+  });
+  
+  let isSubscribed = false;
+  channel.subscribe((status) => {
+    console.log(`[SYNC] Channel status: ${status}`);
+    isSubscribed = status === 'SUBSCRIBED';
+  });
+  
+  return {
+    publish: async (event: RitualEvent) => {
+      if (!isSubscribed) {
+        console.warn(`[SYNC] Not subscribed, trying to send...`);
+      }
+      try {
+        await channel.send({
+          type: 'broadcast',
+          event: 'ritual-update',
+          payload: event,
+        });
+      } catch (e) {
+        console.warn(`[SYNC] Broadcast send failed:`, e);
+      }
+    },
+    subscribe: (handler: (event: RitualEvent) => void) => {
+      handlers.add(handler);
+      return () => handlers.delete(handler);
+    },
+    close: () => {
+      supabase?.removeChannel(channel);
+      handlers.clear();
+    },
+  };
+};
+
+const syncChannel = supabase ? createSupabaseBroadcastChannel(ritualIdGlobal) : null;
 
 export const useSasquachSync = (role: ParticipantRole) => {
   const [state, setState] = useState<RoomState>(() => {
@@ -152,7 +198,7 @@ export const useSasquachSync = (role: ParticipantRole) => {
     if (!sessionId) {
       sessionId = crypto.randomUUID();
       localStorage.setItem(STORAGE_KEY, sessionId);
-      console.log(`[SESSION] New sessionId generated: ${sessionId}`);
+      console.log(`[SESSION] New sessionId: ${sessionId}`);
     }
     return sessionId;
   };
@@ -161,22 +207,78 @@ export const useSasquachSync = (role: ParticipantRole) => {
   const sessionId = sessionIdRef.current;
   
   const stateRef = useRef<RoomState>(state);
+  const whyResponsesRef = useRef<WhyEntry[]>([]);
+  const areaHeadsRef = useRef<AreaHead[]>([]);
   const actionProposalsRef = useRef<any[]>([]);
   
-useEffect(() => {
+  useEffect(() => {
     stateRef.current = state;
+    whyResponsesRef.current = state.context.whyResponses;
+    areaHeadsRef.current = state.context.areaHeads;
     actionProposalsRef.current = state.context.actionProposals;
   }, [state]);
 
   useEffect(() => {
-    console.log(`[SYNC] Setting up BroadcastChannel subscription for ritual: ${currentRitualId}`);
+    if (!syncChannel) {
+      console.log(`[SYNC] No sync channel, skipping broadcast subscription`);
+      return;
+    }
     
-    const broadcastUnsubscribe = broadcastChannel.subscribe((event: RitualEvent) => {
-      if (event.type === 'DATA_UPDATE') {
+    console.log(`[SYNC] Setting up sync channel subscription`);
+    
+    const unsubscribe = syncChannel.subscribe((event: RitualEvent) => {
+      console.log(`[SYNC] Received event:`, event.type);
+      
+      if (event.type === 'WHY_ENTRY' || event.type === 'DATA_UPDATE') {
         const payload = event.payload as any;
+        
+        if (payload.context?.whyResponses) {
+          const newResponses = payload.context.whyResponses;
+          console.log(`[SYNC] Processing ${newResponses.length} whyResponses`);
+          
+          setState((prev) => {
+            const merged = [...prev.context.whyResponses];
+            newResponses.forEach((newR: WhyEntry) => {
+              const exists = merged.some(
+                r => r.timestamp === newR.timestamp && r.role === newR.role
+              );
+              if (!exists) {
+                merged.push(newR);
+              }
+            });
+            return {
+              ...prev,
+              context: { ...prev.context, whyResponses: merged },
+            };
+          });
+        }
+        
+        if (payload.context?.areaHeads) {
+          const newAreas = payload.context.areaHeads;
+          console.log(`[SYNC] Processing ${newAreas.length} areaHeads`);
+          
+          setState((prev) => {
+            const merged = [...prev.context.areaHeads];
+            newAreas.forEach((newA: AreaHead) => {
+              const existingIdx = merged.findIndex(a => a.role === newA.role);
+              if (existingIdx >= 0) {
+                if (newA.weight > merged[existingIdx].weight) {
+                  merged[existingIdx] = newA;
+                }
+              } else {
+                merged.push(newA);
+              }
+            });
+            return {
+              ...prev,
+              context: { ...prev.context, areaHeads: merged },
+            };
+          });
+        }
+        
         if (payload.context?.actionProposals) {
           const newProposals = payload.context.actionProposals;
-          console.log(`[SYNC] BroadcastChannel received ${newProposals.length} proposals`);
+          console.log(`[SYNC] Processing ${newProposals.length} actionProposals`);
           
           setState((prev) => {
             const merged = [...prev.context.actionProposals];
@@ -195,86 +297,29 @@ useEffect(() => {
           });
         }
       }
+      
       if (event.type === 'MISSION_COMPLETE') {
         const payload = event.payload as any;
-        console.log(`[SYNC] MISSION_COMPLETE via BroadcastChannel`);
+        console.log(`[SYNC] MISSION_COMPLETE received`);
         setState((prev) => ({
           ...prev,
           context: { ...prev.context, ruptureCommitment: payload.actionText },
         }));
       }
+      
+      if (event.type === 'PHASE_CHANGE') {
+        const payload = event.payload as any;
+        console.log(`[SYNC] PHASE_CHANGE to:`, payload.phase);
+        setState((prev) => ({ ...prev, currentPhase: payload.phase }));
+      }
     });
     
     return () => {
-      console.log(`[SYNC] Cleaning up BroadcastChannel subscription`);
-      broadcastUnsubscribe();
+      console.log(`[SYNC] Cleaning up sync subscription`);
+      unsubscribe();
     };
-  }, [currentRitualId]);
+  }, []);
 
-  useEffect(() => {
-    if (!supabase || !currentRitualId) {
-      console.warn(`[SUPABASE_SYNC] Skipping Supabase subscription - no client or no ritualId, using BroadcastChannel only`);
-      return;
-    }
-    
-    console.log(`[SUPABASE_SYNC] Setting up Supabase subscription for ritual: ${currentRitualId}`);
-    
-    const channel = supabase.channel(`ritual-${currentRitualId}`)
-      .on('postgres_changes', {
-        event: 'INSERT',
-        schema: 'public',
-        table: 'actions',
-        filter: `ritual_id=eq.${currentRitualId}`,
-      }, (payload: any) => {
-        console.log(`[SUPABASE_SYNC] 📥 Raw payload:`, payload);
-        const newAction = payload.new;
-        console.log(`[SUPABASE_SYNC] 📥 INSERT received:`, newAction);
-        
-        const incomingProposals = actionProposalsRef.current || [];
-        
-        const exists = incomingProposals.some(
-          p => p.id === newAction.id || (p.sessionId === newAction.session_id && p.text === newAction.text)
-        );
-        
-        if (!exists) {
-          console.log(`[SUPABASE_SYNC] Adding new action proposal to state: ${newAction.text?.slice(0, 30)}...`);
-          
-          setState((prev) => {
-            const newProposal = {
-              id: newAction.id,
-              siloRole: newAction.silo_role,
-              role: newAction.role,
-              sessionId: newAction.session_id,
-              text: newAction.text,
-              timestamp: newAction.timestamp,
-              weight: 0.5,
-            };
-            
-            return {
-              ...prev,
-              context: {
-                ...prev.context,
-                actionProposals: [...prev.context.actionProposals, newProposal],
-              },
-            };
-          });
-        } else {
-          console.log(`[SUPABASE_SYNC] Duplicate action, ignoring`);
-        }
-      })
-      .subscribe((status) => {
-        console.log(`[SUPABASE_SYNC] Subscription status: ${status}`);
-        if (status === 'CHANNEL_ERROR') {
-          console.warn(`[SUPABASE_SYNC] Supabase failed, relying on BroadcastChannel fallback`);
-        }
-      });
-    
-    return () => {
-      console.log(`[SUPABASE_SYNC] Cleaning up Supabase subscription`);
-      supabase?.removeChannel(channel);
-    };
-  }, [currentRitualId]);
-  
   const mergeState = useCallback((prev: RoomState, patch: Partial<RoomState>): RoomState => {
     const newState = { ...prev, ...patch };
     
@@ -285,13 +330,8 @@ useEffect(() => {
         const current = (prev.context as any)[key];
         const incoming = value;
         
-        console.log(`[MERGE_STATE] Processing key: ${key}`);
-        
         if (key === 'areaHeads' && Array.isArray(incoming) && Array.isArray(current)) {
-          if (incoming.length === 0) {
-            console.log(`[MERGE_STATE] areaHeads: Incoming empty, keeping existing: ${current.length}`);
-            continue;
-          }
+          if (incoming.length === 0) continue;
           
           const merged = [...current];
           incoming.forEach((incomingSilo: AreaHead) => {
@@ -336,66 +376,135 @@ useEffect(() => {
     return newState;
   }, []);
   
+  const publishToSync = useCallback(async (eventType: RitualEventType, payload: any) => {
+    const event: RitualEvent = {
+      type: eventType as RitualEventType,
+      payload,
+      sender: role,
+      timestamp: Date.now(),
+      sessionId,
+    };
+    
+    if (syncChannel) {
+      console.log(`[SYNC] Publishing ${eventType} via Supabase Broadcast`);
+      await syncChannel.publish(event);
+    } else {
+      console.log(`[SYNC] No sync channel available for ${eventType}`);
+    }
+  }, [role, sessionId]);
+  
   const updateData = useCallback(async (newData: Partial<RoomState>) => {
-    console.log(`[UPDATE_DATA] Sending update:`, Object.keys(newData));
+    console.log(`[SYNC] updateData called with:`, Object.keys(newData));
     
     setState((prev) => {
       const newState = mergeState(prev, newData);
       return newState;
     });
     
-    if (newData.context?.actionProposals) {
-      const proposals = newData.context.actionProposals;
-      if (proposals.length > 0) {
-        const lastProposal = proposals[proposals.length - 1];
+    if (newData.context?.whyResponses) {
+      const responses = newData.context.whyResponses;
+      if (responses.length > 0) {
+        const lastResponse = responses[responses.length - 1];
+        console.log(`[SYNC] Publishing WHY:`, lastResponse.text?.slice(0, 30));
         
-        console.log(`[UPDATE_DATA] Broadcasting via BroadcastChannel:`, lastProposal.text?.slice(0, 30));
+        await publishToSync('WHY_ENTRY', newData);
         
-        broadcastChannel.publish({
-          type: 'DATA_UPDATE',
-          payload: newData,
-          sender: role,
-          timestamp: Date.now(),
-          sessionId,
-        } as any);
-        console.log(`[UPDATE_DATA] BroadcastChannel publish done`);
-        
-        if (supabase && lastProposal.text) {
-          console.log(`[UPDATE_DATA] Attempting Supabase insert...`);
-          
-          const insertData = {
-            ritual_id: currentRitualId,
-            session_id: sessionId,
-            role: role,
-            silo_role: lastProposal.siloRole,
-            text: lastProposal.text,
-            timestamp: lastProposal.timestamp,
-            weight: lastProposal.weight || 0.5,
-          };
-          
+        if (supabase && lastResponse.text) {
           try {
-            const { data, error } = await (supabase.from('actions') as any).insert(insertData);
+            const { error } = await supabase.from('why_entries').insert({
+              ritual_id: currentRitualId,
+              session_id: sessionId,
+              role: role,
+              text: lastResponse.text,
+              timestamp: lastResponse.timestamp,
+              weight: lastResponse.weight || 0.5,
+              status: lastResponse.status || 'active',
+              reinforced_by: lastResponse.reinforcements || [],
+            });
+            
             if (error) {
-              console.warn(`[UPDATE_DATA] Supabase insert failed (fallback working):`, error);
+              console.warn(`[SYNC] WHY insert failed:`, error);
             } else {
-              console.log(`[UPDATE_DATA] Supabase insert success:`, data);
+              console.log(`[SYNC] WHY insert success`);
             }
           } catch (e) {
-            console.warn(`[UPDATE_DATA] Supabase insert exception:`, e);
+            console.warn(`[SYNC] WHY insert exception:`, e);
           }
         }
       }
     }
     
     if (newData.context?.areaHeads) {
-      console.log(`[UPDATE_DATA] areaHeads update:`, newData.context.areaHeads.map(a => a.role));
+      const areas = newData.context.areaHeads;
+      console.log(`[SYNC] Publishing ${areas.length} areaHeads`);
+      
+      await publishToSync('AREA_HEAD', newData);
+      
+      if (supabase && areas.length > 0) {
+        const lastArea = areas[areas.length - 1];
+        try {
+          const { error } = await supabase.from('area_heads').insert({
+            ritual_id: currentRitualId,
+            session_id: sessionId,
+            role: lastArea.role,
+            success_metric: lastArea.successMetric || '',
+            weight: lastArea.weight || 0.5,
+            status: lastArea.status || 'active',
+            voted_by: lastArea.votedBy || [],
+            merged_from: lastArea.mergedFrom || [],
+          });
+          
+          if (error) {
+            console.warn(`[SYNC] Area head insert failed:`, error);
+          } else {
+            console.log(`[SYNC] Area head insert success`);
+          }
+        } catch (e) {
+          console.warn(`[SYNC] Area head insert exception:`, e);
+        }
+      }
     }
-  }, [role, mergeState, sessionId]);
+    
+    if (newData.context?.actionProposals) {
+      const proposals = newData.context.actionProposals;
+      if (proposals.length > 0) {
+        const lastProposal = proposals[proposals.length - 1];
+        console.log(`[SYNC] Publishing ACTION:`, lastProposal.text?.slice(0, 30));
+        
+        await publishToSync('ACTION_PROPOSAL', newData);
+        
+        if (supabase && lastProposal.text) {
+          try {
+            const { error } = await supabase.from('actions').insert({
+              ritual_id: currentRitualId,
+              session_id: sessionId,
+              role: role,
+              silo_role: lastProposal.siloRole,
+              text: lastProposal.text,
+              timestamp: lastProposal.timestamp,
+              weight: lastProposal.weight || 0.5,
+            });
+            
+            if (error) {
+              console.warn(`[SYNC] Action insert failed:`, error);
+            } else {
+              console.log(`[SYNC] Action insert success`);
+            }
+          } catch (e) {
+            console.warn(`[SYNC] Action insert exception:`, e);
+          }
+        }
+      }
+    }
+  }, [role, mergeState, sessionId, publishToSync]);
   
-  const changePhase = useCallback((newPhase: RitualPhase) => {
-    console.log(`[CHANGE_PHASE] Changing to: ${newPhase}`);
+  const changePhase = useCallback(async (newPhase: RitualPhase) => {
+    console.log(`[SYNC] Changing phase to: ${newPhase}`);
+    
     setState((prev) => mergeState(prev, { currentPhase: newPhase }));
-  }, [mergeState]);
+    
+    await publishToSync('PHASE_CHANGE', { phase: newPhase });
+  }, [mergeState, publishToSync]);
   
   const handleRefortifySilo = useCallback((payload: RefortifySiloPayload & { sessionId: string }) => {
     console.log(`[REFORTIFY] area: ${payload.areaName}`);

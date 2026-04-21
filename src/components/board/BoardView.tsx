@@ -612,10 +612,30 @@ interface WeightedSiloNodeProps {
   nodeId?: string;
 }
 
+const FRAGMENT_COUNT = 12;
+
+const generateFragments = (seed: number, count: number) => {
+  const fragments = [];
+  for (let i = 0; i < count; i++) {
+    const angle = (i / count) * Math.PI * 2;
+    const jitter = Math.sin(seed * 9999 + i * 137) * 0.3;
+    const distance = 150 + Math.random() * 200;
+    fragments.push({
+      angle: angle + jitter,
+      distance,
+      size: 4 + Math.random() * 8,
+      delay: i * 0.02,
+    });
+  }
+  return fragments;
+};
+
 const WeightedSiloNode: React.FC<WeightedSiloNodeProps> = ({ areaHead, index, isNew, isMerged, isSelected, isSelectable, isFaded, isFocused, isDisintegrating, onContextMenu, onSelect, nodeId }) => {
   const [isHovered, setIsHovered] = useState(false);
   const nodeRef = useRef<HTMLDivElement>(null);
   const { weight } = areaHead;
+  
+  const fragments = useMemo(() => generateFragments(areaHead.timestamp || Date.now(), FRAGMENT_COUNT), [areaHead.timestamp]);
 
   useEffect(() => {
     if (!nodeId || !nodeRef.current) return;
@@ -623,7 +643,13 @@ const WeightedSiloNode: React.FC<WeightedSiloNodeProps> = ({ areaHead, index, is
       if (nodeRef.current) {
         const rect = nodeRef.current.getBoundingClientRect();
         window.dispatchEvent(new CustomEvent('silo-position-update', {
-          detail: { nodeId, x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 }
+          detail: { 
+            nodeId, 
+            x: rect.x + rect.width / 2, 
+            y: rect.y + rect.height / 2,
+            width: rect.width,
+            height: rect.height
+          }
         }));
       }
     };
@@ -666,17 +692,53 @@ const WeightedSiloNode: React.FC<WeightedSiloNodeProps> = ({ areaHead, index, is
     damping: isDisintegrating ? 8 : 20,
   };
 
+  const nodeCenterX = isSelected ? '50%' : '50%';
+  const nodeCenterY = isSelected ? '50%' : '50%';
+
   return (
-    <motion.div
-      initial={{ 
-        scale: 0, 
-        opacity: 0, 
-      }}
-      animate={{
-        scale: isDisintegrating ? [2.5, 3, 0] : (isSelected ? regularScale * 1.15 : regularScale),
-        opacity: isDisintegrating ? [0.95, 0.5, 0] : baseOpacity,
-        filter: isDisintegrating ? ['brightness(1)', 'brightness(2)', 'brightness(3)'] : 'brightness(1)',
-      }}
+    <div ref={nodeRef} className="relative">
+      {isDisintegrating && fragments.map((frag, fragIdx) => (
+        <motion.div
+          key={fragIdx}
+          initial={{ x: 0, y: 0, scale: 1, opacity: 0.8, rotate: 0 }}
+          animate={{
+            x: Math.cos(frag.angle) * frag.distance,
+            y: Math.sin(frag.angle) * frag.distance,
+            scale: [1, 0.3, 0],
+            opacity: [0.8, 0.3, 0],
+            rotate: (frag.angle * 180) / Math.PI,
+          }}
+          transition={{
+            duration: 0.8,
+            delay: frag.delay,
+            ease: [0.68, -0.55, 0.27, 1.55],
+          }}
+          className="absolute rounded-full pointer-events-none"
+          style={{
+            width: frag.size,
+            height: frag.size,
+            left: nodeCenterX,
+            top: nodeCenterY,
+            transform: 'translate(-50%, -50%)',
+            background: isSelected 
+              ? 'radial-gradient(circle, rgba(251, 191, 36, 0.9) 0%, rgba(195, 163, 67, 0.5) 100%)'
+              : 'radial-gradient(circle, rgba(195, 163, 67, 0.7) 0%, rgba(120, 100, 40, 0.3) 100%)',
+            boxShadow: isSelected
+              ? '0 0 15px rgba(251, 191, 36, 0.8)'
+              : '0 0 8px rgba(195, 163, 67, 0.5)',
+          }}
+        />
+      ))}
+      <motion.div
+        initial={{ 
+          scale: 0, 
+          opacity: 0, 
+        }}
+        animate={{
+          scale: isDisintegrating ? [2.5, 3, 0] : (isSelected ? regularScale * 1.15 : regularScale),
+          opacity: isDisintegrating ? [0.95, 0.5, 0] : baseOpacity,
+          filter: isDisintegrating ? ['brightness(1)', 'brightness(2)', 'brightness(3)'] : 'brightness(1)',
+        }}
       whileHover={isSelectable && !isDiscarded && !isDisintegrating ? { scale: regularScale * 1.2 } : {}}
       transition={{
         ...springTransition,
@@ -851,6 +913,7 @@ const WeightedSiloNode: React.FC<WeightedSiloNodeProps> = ({ areaHead, index, is
         />
       )}
     </motion.div>
+    </div>
   );
 };
 
@@ -1727,10 +1790,22 @@ const ActionSwarm: React.FC<ActionSwarmProps> = ({
 }) => {
   const [dimensions, setDimensions] = useState({ width: 0, height: 0, vmin: 0 });
   const [siloPositions, setSiloPositions] = useState<Record<string, { x: number; y: number }>>({});
+  const [siloBounds, setSiloBounds] = useState<Record<string, { width: number; height: number; centerX: number; centerY: number }>>({});
   
   useEffect(() => {
     const handleSiloPosition = (e: CustomEvent) => {
       setSiloPositions(prev => ({ ...prev, [e.detail.nodeId]: { x: e.detail.x, y: e.detail.y } }));
+      if (e.detail.width && e.detail.height) {
+        setSiloBounds(prev => ({ 
+          ...prev, 
+          [e.detail.nodeId]: { 
+            width: e.detail.width, 
+            height: e.detail.height,
+            centerX: e.detail.x,
+            centerY: e.detail.y
+          } 
+        }));
+      }
     };
     window.addEventListener('silo-position-update', handleSiloPosition as EventListener);
     return () => window.removeEventListener('silo-position-update', handleSiloPosition as EventListener);
@@ -1752,11 +1827,23 @@ const ActionSwarm: React.FC<ActionSwarmProps> = ({
     if (!selectedSilo) return null;
     const idx = areaHeads.findIndex(a => a.role === selectedSilo.role);
     const nodeId = `silo-${idx}`;
+    
+    if (siloBounds[nodeId] && siloPositions[nodeId]) {
+      const bounds = siloBounds[nodeId];
+      return {
+        x: bounds.centerX,
+        y: bounds.centerY,
+        width: bounds.width,
+        height: bounds.height,
+      };
+    }
+    
     if (siloPositions[nodeId]) {
       return siloPositions[nodeId];
     }
+    
     return getSiloCenterPosition(selectedSilo.role, areaHeads, dimensions);
-  }, [selectedSilo, areaHeads, dimensions, siloPositions]);
+  }, [selectedSilo, areaHeads, dimensions, siloPositions, siloBounds]);
   
   const filteredActions = useMemo(() => {
     if (!selectedSilo) return [];
@@ -1765,22 +1852,36 @@ const ActionSwarm: React.FC<ActionSwarmProps> = ({
     return unique;
   }, [actionProposals, selectedSilo]);
   
-  const orbitRadius = dimensions.vmin * ORBIT_RADIUS_VMIN;
+  interface SilosPositionWithBounds {
+  x: number;
+  y: number;
+  width?: number;
+  height?: number;
+}
+
+const orbitRadius = (selectedSiloPosition as SilosPositionWithBounds | undefined)?.width 
+    ? (selectedSiloPosition as SilosPositionWithBounds).width! * 1.2 
+    : dimensions.vmin * ORBIT_RADIUS_VMIN;
   
   const actionPositions = useMemo(() => {
     if (!selectedSiloPosition || filteredActions.length === 0) return [];
+    
+    const pos = selectedSiloPosition as SilosPositionWithBounds;
+    const centerX = pos.x;
+    const centerY = pos.y;
     
     const positions = filteredActions.map((action, idx) => {
       const totalAngles = filteredActions.length;
       const baseAngle = (idx / totalAngles) * Math.PI * 2 - Math.PI / 2;
       
       const jitter = (action.timestamp % 100) / 100;
-      const microOffsetX = (Math.sin(jitter * Math.PI * 2) * 0.5) * (dimensions.vmin * 0.02);
-      const microOffsetY = (Math.cos(jitter * Math.PI * 2) * 0.5) * (dimensions.vmin * 0.02);
+      const offsetScale = (pos?.width || dimensions.vmin * 0.15);
+      const microOffsetX = Math.sin(jitter * Math.PI * 2) * 0.5 * offsetScale;
+      const microOffsetY = Math.cos(jitter * Math.PI * 2) * 0.5 * offsetScale;
       
       return {
-        x: selectedSiloPosition.x + Math.cos(baseAngle) * orbitRadius + microOffsetX,
-        y: selectedSiloPosition.y + Math.sin(baseAngle) * orbitRadius + microOffsetY,
+        x: centerX + Math.cos(baseAngle) * orbitRadius + microOffsetX,
+        y: centerY + Math.sin(baseAngle) * orbitRadius + microOffsetY,
         angle: baseAngle,
       };
     });

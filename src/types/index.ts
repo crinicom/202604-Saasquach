@@ -27,6 +27,7 @@ export interface AreaHead extends WeightedEntry {
   votedBy: Voter[];
   aliases?: string[];
   mergedFrom?: string[];
+  timestamp?: number;
 }
 
 export interface Reinforcement {
@@ -81,7 +82,10 @@ export type RitualEventType =
   | 'SYNC_REQUEST' 
   | 'SYNC_RESPONSE'
   | 'REFORTIFY_SILO'
-  | 'MISSION_COMPLETE';
+  | 'MISSION_COMPLETE'
+  | 'WHY_ENTRY'
+  | 'AREA_HEAD'
+  | 'ACTION_PROPOSAL';
 
 export interface RefortifySiloPayload {
   areaName: string;
@@ -120,6 +124,8 @@ export interface SimilarNodes {
 export interface TenantConfig {
   primaryColor: string;
   secondaryColor: string;
+  primaryGradient: string;
+  glowColor: string;
   institutionName: string;
   logoUrl?: string;
   ritualTagline: string;
@@ -128,6 +134,8 @@ export interface TenantConfig {
 export const DEFAULT_TENANT_CONFIG: TenantConfig = {
   primaryColor: '#059669',
   secondaryColor: '#c3a343',
+  primaryGradient: 'radial-gradient(circle at center, rgba(6, 78, 59, 0.4) 0%, rgba(2, 6, 23, 1) 70%)',
+  glowColor: 'rgba(6, 78, 59, 0.3)',
   institutionName: 'Sasquach Original',
   ritualTagline: 'Motor de Ejecución Clínica',
 };

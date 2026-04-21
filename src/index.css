@@ -10,6 +10,11 @@
   --color-forest-800: #1c1917;
   --color-forest-700: #292524;
   --color-forest-gradient: var(--color-forest-void);
+  
+  /* Dynamic Theme Variables (set by useTheme hook) */
+  --color-theme-primary: var(--theme-primary, #059669);
+  --color-theme-secondary: var(--theme-secondary, #c3a343);
+  --color-theme-glow: var(--theme-glow, rgba(6, 78, 59, 0.3));
 
   /* Typography Scale: Augmented Fourth (1.414) */
   --font-serif: "Playfair Display", serif;

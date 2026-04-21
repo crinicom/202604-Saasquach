@@ -1,22 +1,31 @@
 import { useRitual } from '../../hooks/useRitual';
+import { useTheme } from '../../hooks/useTheme';
 import { BoardView } from './BoardView';
 import { motion } from 'framer-motion';
 
 /**
  * BoardRoot: The Mirror Narrative Orchestrator
  * Improved stacking context for visibility.
+ * Dynamic theming based on tenant.
  */
 export const BoardRoot = () => {
   const { state, tenantConfig } = useRitual();
+  const { cssVariables } = useTheme();
 
   return (
-    <div className="min-h-screen bg-stone-950 text-stone-200 overflow-hidden relative font-sans">
-      {/* 1. Deep Background Layer (z-0) */}
+    <div 
+      className="min-h-screen bg-stone-950 text-stone-200 overflow-hidden relative font-sans"
+      style={cssVariables as React.CSSProperties}
+    >
+      {/* 1. Dynamic Background Layer (z-0) - uses tenant primaryColor */}
       <div className="absolute inset-0 z-0 pointer-events-none">
          {/* Subtle texture */}
          <div className="absolute inset-0 opacity-10 bg-[url('https://www.transparenttextures.com/patterns/dark-leather.png')]" />
-         {/* Emerald Glow */}
-         <div className="absolute inset-0 bg-emerald-950/20" />
+         {/* Dynamic Glow based on tenant */}
+         <div 
+            className="absolute inset-0 transition-colors duration-1000"
+            style={{ backgroundColor: tenantConfig.primaryColor, opacity: 0.15 }}
+         />
       </div>
 
       {/* 2. Main content Layer (z-10) */}
