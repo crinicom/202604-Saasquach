@@ -1108,7 +1108,12 @@ const RootCauseOrb: React.FC<RootCauseOrbProps> = ({ cause, index, facts, positi
             </div>
           ))}
         </div>
-      </div>
+
+        {/* Clinical Weight */}
+        <div className="mt-2 text-[8px] font-bold uppercase tracking-widest text-stone-500">
+          Clinical Weight: <span className="text-sasquach-gold">{((facts.length * roles.length) / 4).toFixed(2)}</span>
+        </div>
+       </div>
       
       {/* Visual pulse for validation gate */}
       {!isValidated && roles.length >= 2 && (
