@@ -25,3 +25,16 @@ test-sync.mjs
 
 # Environment files (local only)
 .env
+
+# Next.js build output
+.next/
+out/
+
+# Dependencies
+node_modules/
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
